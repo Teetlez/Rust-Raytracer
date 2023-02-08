@@ -8,8 +8,27 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
+    #[inline]
     pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
         Vec3 { x, y, z }
+    }
+
+    #[inline]
+    pub fn zero() -> Vec3 {
+        Vec3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
+    }
+
+    #[inline]
+    pub fn one() -> Vec3 {
+        Vec3 {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+        }
     }
 
     #[inline]
@@ -45,21 +64,51 @@ impl Vec3 {
         }
     }
 
+    #[inline]
+    pub fn reflect(&self, normal: Vec3) -> Vec3 {
+        *self - 2.0 * self.dot(normal) * normal
+    }
+
+    #[inline]
+    pub fn refract(&self, normal: Vec3, ni_over_nt: f32) -> Option<Vec3> {
+        let uv = self.normalize();
+        let dt = uv.dot(normal);
+        let discriminant = 1.0 - ni_over_nt * ni_over_nt * (1.0 - dt * dt);
+        if discriminant > 0.0 {
+            Some(ni_over_nt * (uv - dt * normal) - discriminant.sqrt() * normal)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn random() -> Vec3 {
+        Vec3::new(fastrand::f32(), fastrand::f32(), fastrand::f32())
+    }
+
     pub fn random_in_unit_sphere() -> Vec3 {
-        let mut rand_v = Vec3::new(
-            (fastrand::f32() * 1.9) - 1.0,
-            (fastrand::f32() * 1.9) - 1.0,
-            (fastrand::f32() * 1.9) - 1.0,
-        );
-        while rand_v.length_sq() >= 1.0 {
-            rand_v = Vec3::new(
-                (fastrand::f32() * 1.9) - 1.0,
-                (fastrand::f32() * 1.9) - 1.0,
-                (fastrand::f32() * 1.9) - 1.0,
-            );
+        let mut rand_v = (2.0 * Vec3::random()) - Vec3::one();
+        while rand_v.length_sq() > 1.0 {
+            rand_v = (2.0 * Vec3::random()) - Vec3::one();
         }
         rand_v
     }
+    pub fn random_in_unit_disk() -> Vec3 {
+        let mut rand_disk = Vec3::new(
+            (fastrand::f32() * 1.9) - 1.0,
+            (fastrand::f32() * 1.9) - 1.0,
+            0.0,
+        );
+        while rand_disk.length_sq() > 1.0 {
+            rand_disk = Vec3::new(
+                (fastrand::f32() * 1.9) - 1.0,
+                (fastrand::f32() * 1.9) - 1.0,
+                0.0,
+            );
+        }
+        rand_disk
+    }
+
     #[inline]
     pub fn random_unit_vector() -> Vec3 {
         Vec3::random_in_unit_sphere().normalize()
@@ -73,6 +122,11 @@ impl Vec3 {
             -in_unit_sphere
         }
     }
+
+    #[inline]
+    pub fn near_zero(&self) -> bool {
+        self.length_sq() < 1e-8
+    }
 }
 
 impl Add for Vec3 {
@@ -83,6 +137,17 @@ impl Add for Vec3 {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
             z: self.z + rhs.z,
+        }
+    }
+}
+
+impl Mul<Vec3> for Vec3 {
+    type Output = Vec3;
+    fn mul(self, rhs: Vec3) -> Vec3 {
+        Vec3 {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+            z: self.z * rhs.z,
         }
     }
 }

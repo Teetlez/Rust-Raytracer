@@ -1,0 +1,52 @@
+use std::f32::INFINITY;
+
+use crate::camera::Camera;
+use crate::hittable::World;
+use crate::material::Scatter;
+use crate::ray::Ray;
+use crate::{MAX_BOUNCE, SAMPLES};
+use minifb::clamp;
+use rayon::prelude::*;
+
+use crate::vec3::Vec3;
+
+#[inline]
+fn to_rgb(color: Vec3) -> u32 {
+    255 << 24
+        | ((clamp(0.0, color.x.sqrt(), 0.99) * 255.4) as u32) << 16
+        | ((clamp(0.0, color.y.sqrt(), 0.99) * 255.4) as u32) << 8
+        | ((clamp(0.0, color.z.sqrt(), 0.99) * 255.4) as u32)
+}
+
+fn ray_color(ray: Ray, world: &World, depth: usize) -> Vec3 {
+    if depth >= MAX_BOUNCE {
+        return Vec3::new(0.0, 0.0, 0.0);
+    }
+
+    if let Some(hit) = world.hit(&ray, 0.0005, INFINITY) {
+        let scatter: Scatter = hit.material.scatter(ray, hit);
+        scatter.attenuation * ray_color(scatter.ray, world, depth + 1)
+    } else {
+        let t = 0.5 * (ray.dir.y + 1.0);
+        (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
+    }
+}
+
+pub fn render(width: usize, height: usize, camera: Camera, world: &World) -> Vec<u32> {
+    (0..width * height)
+        .into_par_iter()
+        .map_init(
+            || (),
+            |_, screen_pos| {
+                let y = height - 1 - screen_pos / width;
+                let x = screen_pos % width;
+                let mut pixel_color = Vec3::zero();
+                (0..SAMPLES).for_each(|_| {
+                    pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), &world, 0);
+                });
+
+                to_rgb(pixel_color / SAMPLES as f32)
+            },
+        )
+        .collect()
+}

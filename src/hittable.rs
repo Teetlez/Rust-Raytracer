@@ -1,30 +1,41 @@
-use crate::{ray::Ray, vec3::Vec3};
+use crate::{material::Material, ray::Ray, vec3::Vec3};
 
 #[derive(Copy, Clone)]
-pub struct HitRecord {
+pub struct HitRecord<'obj> {
     pub t: f32,
     pub point: Vec3,
     pub normal: Vec3,
+    pub material: &'obj Material,
 }
 
-impl HitRecord {
-    pub fn new(t: f32, point: Vec3, normal: Vec3) -> HitRecord {
-        HitRecord { t, point, normal }
+impl HitRecord<'_> {
+    pub fn new(t: f32, point: Vec3, normal: Vec3, material: &'_ Material) -> HitRecord<'_> {
+        HitRecord {
+            t,
+            point,
+            normal,
+            material,
+        }
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Sphere {
-    center: Vec3,
-    radius: f32,
+    pub center: Vec3,
+    pub radius: f32,
+    pub material: Material,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32) -> Sphere {
-        Sphere { center, radius }
+    pub fn new(center: Vec3, radius: f32, material: Material) -> Sphere {
+        Sphere {
+            center,
+            radius,
+            material,
+        }
     }
 
-    pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         let oc = ray.pos - self.center;
         let a = ray.dir.length_sq();
         let half_b = oc.dot(ray.dir);
@@ -35,21 +46,23 @@ impl Sphere {
             let mut temp = (-half_b - (half_b * half_b - a * c).sqrt()) / a;
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
-                return Some(HitRecord {
-                    t: temp,
-                    point: hit_point,
-                    normal: ((1.0 / self.radius) * (hit_point - self.center)).normalize(),
-                });
+                return Some(HitRecord::new(
+                    temp,
+                    hit_point,
+                    ((1.0 / self.radius) * (hit_point - self.center)).normalize(),
+                    &self.material,
+                ));
             }
 
             temp = (-half_b + (half_b * half_b - a * c).sqrt()) / a;
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
-                return Some(HitRecord {
-                    t: temp,
-                    point: hit_point,
-                    normal: ((1.0 / self.radius) * (hit_point - self.center)).normalize(),
-                });
+                return Some(HitRecord::new(
+                    temp,
+                    hit_point,
+                    ((1.0 / self.radius) * (hit_point - self.center)).normalize(),
+                    &self.material,
+                ));
             }
         }
         None
@@ -57,7 +70,7 @@ impl Sphere {
 }
 
 pub struct World {
-    hittables: Vec<Sphere>,
+    pub hittables: Vec<Sphere>,
 }
 
 impl World {
@@ -65,7 +78,7 @@ impl World {
         World { hittables }
     }
 
-    pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         let mut closest = t_max;
         let mut possible_hit: Option<HitRecord> = None;
         for object in self.hittables.iter() {
