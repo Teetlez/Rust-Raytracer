@@ -42,7 +42,7 @@ impl Sphere {
         let disc = half_b * half_b - c;
 
         if disc > 0.0 {
-            let mut temp = (-half_b - (half_b * half_b - c).sqrt());
+            let mut temp = -half_b - (half_b * half_b - c).sqrt();
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
                 return Some(HitRecord::new(
@@ -53,7 +53,7 @@ impl Sphere {
                 ));
             }
 
-            temp = (-half_b + (half_b * half_b - c).sqrt());
+            temp = -half_b + (half_b * half_b - c).sqrt();
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
                 return Some(HitRecord::new(
@@ -81,7 +81,7 @@ impl World {
         let mut closest = t_max;
         let mut possible_hit: Option<HitRecord> = None;
         for object in self.hittables.iter() {
-            if let Some(hit) = object.hit(&ray, t_min, t_max) {
+            if let Some(hit) = object.hit(ray, t_min, t_max) {
                 closest = if hit.t < closest {
                     possible_hit = Some(hit);
                     hit.t

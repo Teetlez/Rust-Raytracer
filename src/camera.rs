@@ -1,5 +1,5 @@
 extern crate fastrand;
-use crate::{ray::Ray, vec3::Vec3, ASPECT_RATIO, HEIGHT, WIDTH};
+use crate::{ray::Ray, vec3::Vec3, HEIGHT, WIDTH};
 
 #[derive(Copy, Clone)]
 pub struct Camera {

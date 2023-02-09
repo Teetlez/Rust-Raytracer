@@ -46,7 +46,7 @@ pub fn render(width: usize, height: usize, camera: Camera, world: &World) -> Vec
                 let x = screen_pos % width;
                 let mut pixel_color = Vec3::zero();
                 (0..SAMPLES).for_each(|_| {
-                    pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), &world, 0);
+                    pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), world, 0);
                 });
 
                 to_rgb(pixel_color / SAMPLES as f32)
