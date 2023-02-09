@@ -1,3 +1,6 @@
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod camera;
 mod hittable;
 mod material;
@@ -12,6 +15,7 @@ use hittable::{Sphere, World};
 use material::Material;
 use minifb::{Key, Window, WindowOptions};
 
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use vec3::Vec3;
 
 const ASPECT_RATIO: f32 = 3.0 / 2.0;
@@ -23,7 +27,7 @@ const SAMPLES: usize = 128;
 
 const MAX_BOUNCE: usize = 8;
 
-const MAX_PASSES: u32 = 1;
+const MAX_PASSES: u32 = 32;
 
 #[inline]
 fn mix_colors(color1: u32, color2: u32, weight1: f32) -> u32 {
@@ -57,33 +61,31 @@ fn main() {
 
     // Make camera
     let camera = Camera::new(
-        Vec3::new(13.0, 2.0, 3.0),
+        Vec3::new(0.0, 0.5, -4.0),
         Vec3::zero(),
         Vec3::new(0.0, 1.0, 0.0),
-        20.0,
+        60.0,
         ASPECT_RATIO,
         0.1,
-        10.0,
+        5.0,
     );
 
     // World setup
-    let world = random_scene();
+    let world = box_scene();
     let mut pass: u32 = 0;
 
     // Render loop
     while window.is_open() && !window.is_key_down(Key::Escape) {
         if pass <= MAX_PASSES {
             pass += 1;
-            fastrand::seed(fastrand::get_seed() + pass as u64);
 
             // println!("done!");
-            window
-                .update_with_buffer(
-                    render::render(WIDTH, HEIGHT, camera, &world).as_slice(),
-                    WIDTH,
-                    HEIGHT,
-                )
-                .unwrap();
+            buffer = buffer
+                .into_par_iter()
+                .zip_eq(render::render(WIDTH, HEIGHT, camera, &world).into_par_iter())
+                .map(|(c1, c2)| mix_colors(c1, c2, 1.0 / pass as f32))
+                .collect();
+            window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
             println!("finished pass {pass}");
         } else {
             window.update();
@@ -91,14 +93,46 @@ fn main() {
     }
 }
 
+fn box_scene() -> World {
+    let mut world: World = World::new(vec![]);
+
+    let glass = Material::dielectric(1.46);
+    let steel = Material::metal(0.7 * Vec3::one(), 0.2);
+    let light = Material::lambertian(16.0 * Vec3::one());
+    let diffuse = Material::lambertian(Vec3::new(0.5, 0.5, 0.5));
+    let diffuse_red = Material::lambertian(Vec3::new(0.9, 0.1, 0.1));
+    let diffuse_green = Material::lambertian(Vec3::new(0.1, 0.9, 0.1));
+    let diffuse_blue = Material::lambertian(Vec3::new(0.1, 0.1, 0.9));
+
+    world.add(Sphere::new(Vec3::new(1.5, -1.0, 2.0), 1.0, steel));
+    world.add(Sphere::new(Vec3::new(-1.5, -1.0, 0.5), 1.0, glass));
+    world.add(Sphere::new(Vec3::new(0.0, 102.999, 2.0), 100.0, light));
+
+    world.add(Sphere::new(Vec3::new(0.0, 503.0, 0.0), 500.0, diffuse));
+    world.add(Sphere::new(
+        Vec3::new(0.0, -502.0, 0.0),
+        500.0,
+        diffuse_blue,
+    ));
+
+    world.add(Sphere::new(Vec3::new(503.5, 0.0, 0.0), 500.0, diffuse_red));
+    world.add(Sphere::new(
+        Vec3::new(-503.5, 0.0, 0.0),
+        500.0,
+        diffuse_green,
+    ));
+
+    world.add(Sphere::new(Vec3::new(0.0, 0.0, 505.0), 500.0, diffuse));
+    world
+}
+
+#[ignore]
 fn random_scene() -> World {
     let mut world: World = World::new(vec![]);
     let ground: Material = Material::lambertian(0.5 * Vec3::one());
-    world
-        .hittables
-        .push(Sphere::new(Vec3::new(0.0, -1000.0, 0.0), 1000.0, ground));
-    for a in -11..11 {
-        for b in -11..11 {
+    world.add(Sphere::new(Vec3::new(0.0, -1000.0, 0.0), 1000.0, ground));
+    for a in -8..8 {
+        for b in -8..8 {
             let choose_mat = fastrand::f32();
             let center = Vec3::new(
                 a as f32 + 0.9 * fastrand::f32(),
@@ -110,19 +144,15 @@ fn random_scene() -> World {
                 if choose_mat < 0.8 {
                     // diffuse
                     let albedo = Vec3::random() * Vec3::random();
-                    world
-                        .hittables
-                        .push(Sphere::new(center, 0.2, Material::lambertian(albedo)));
+                    world.add(Sphere::new(center, 0.2, Material::lambertian(albedo)));
                 } else if choose_mat < 0.95 {
                     // metal
                     let albedo = (0.5 * Vec3::random()) + 0.5 * Vec3::one();
                     let fuzz = 0.5 * fastrand::f32();
-                    world
-                        .hittables
-                        .push(Sphere::new(center, 0.2, Material::metal(albedo, fuzz)));
+                    world.add(Sphere::new(center, 0.2, Material::metal(albedo, fuzz)));
                 } else {
                     // glass
-                    world.hittables.push(Sphere::new(
+                    world.add(Sphere::new(
                         center,
                         0.2,
                         Material::dielectric(fastrand::f32() + 1.2),
@@ -136,17 +166,9 @@ fn random_scene() -> World {
     let steel = Material::metal(0.7 * Vec3::one(), 0.2);
     let diffuse = Material::lambertian(Vec3::new(0.2, 0.7, 0.8));
 
-    world
-        .hittables
-        .push(Sphere::new(Vec3::new(0.0, 1.0, 0.0), 1.0, steel));
-
-    world
-        .hittables
-        .push(Sphere::new(Vec3::new(-4.0, 1.0, 0.0), 1.0, diffuse));
-
-    world
-        .hittables
-        .push(Sphere::new(Vec3::new(4.0, 1.0, 0.0), 1.0, glass));
+    world.add(Sphere::new(Vec3::new(0.0, 1.0, 0.0), 1.0, steel));
+    world.add(Sphere::new(Vec3::new(-4.0, 1.0, 0.0), 1.0, diffuse));
+    world.add(Sphere::new(Vec3::new(4.0, 1.0, 0.0), 1.0, glass));
 
     world
 }

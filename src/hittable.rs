@@ -37,13 +37,12 @@ impl Sphere {
 
     pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         let oc = ray.pos - self.center;
-        let a = ray.dir.length_sq();
         let half_b = oc.dot(ray.dir);
         let c = oc.length_sq() - (self.radius * self.radius);
-        let disc = half_b * half_b - a * c;
+        let disc = half_b * half_b - c;
 
         if disc > 0.0 {
-            let mut temp = (-half_b - (half_b * half_b - a * c).sqrt()) / a;
+            let mut temp = (-half_b - (half_b * half_b - c).sqrt());
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
                 return Some(HitRecord::new(
@@ -54,7 +53,7 @@ impl Sphere {
                 ));
             }
 
-            temp = (-half_b + (half_b * half_b - a * c).sqrt()) / a;
+            temp = (-half_b + (half_b * half_b - c).sqrt());
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
                 return Some(HitRecord::new(
@@ -92,5 +91,9 @@ impl World {
             }
         }
         possible_hit
+    }
+
+    pub fn add(&mut self, sphere: Sphere) {
+        self.hittables.push(sphere);
     }
 }

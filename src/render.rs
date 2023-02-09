@@ -25,7 +25,11 @@ fn ray_color(ray: Ray, world: &World, depth: usize) -> Vec3 {
 
     if let Some(hit) = world.hit(&ray, 0.0005, INFINITY) {
         let scatter: Scatter = hit.material.scatter(ray, hit);
-        scatter.attenuation * ray_color(scatter.ray, world, depth + 1)
+        if scatter.attenuation.length_sq() <= 3.0 {
+            scatter.attenuation * ray_color(scatter.ray, world, depth + 1)
+        } else {
+            scatter.attenuation
+        }
     } else {
         let t = 0.5 * (ray.dir.y + 1.0);
         (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
