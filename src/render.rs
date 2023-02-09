@@ -10,14 +10,6 @@ use rayon::prelude::*;
 
 use crate::vec3::Vec3;
 
-#[inline]
-fn to_rgb(color: Vec3) -> u32 {
-    255 << 24
-        | ((clamp(0.0, color.x.sqrt(), 0.99) * 255.4) as u32) << 16
-        | ((clamp(0.0, color.y.sqrt(), 0.99) * 255.4) as u32) << 8
-        | ((clamp(0.0, color.z.sqrt(), 0.99) * 255.4) as u32)
-}
-
 fn ray_color(ray: Ray, world: &World, depth: usize) -> Vec3 {
     if depth >= MAX_BOUNCE {
         return Vec3::new(0.0, 0.0, 0.0);
@@ -36,7 +28,13 @@ fn ray_color(ray: Ray, world: &World, depth: usize) -> Vec3 {
     }
 }
 
-pub fn render(width: usize, height: usize, camera: Camera, world: &World) -> Vec<u32> {
+pub fn render(
+    width: usize,
+    height: usize,
+    camera: Camera,
+    world: &World,
+    buffer: &Vec<Vec3>,
+) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
         .map_init(
@@ -49,7 +47,7 @@ pub fn render(width: usize, height: usize, camera: Camera, world: &World) -> Vec
                     pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), world, 0);
                 });
 
-                to_rgb(pixel_color / SAMPLES as f32)
+                buffer[screen_pos] + (pixel_color / SAMPLES as f32)
             },
         )
         .collect()

@@ -27,25 +27,11 @@ const SAMPLES: usize = 128;
 
 const MAX_BOUNCE: usize = 8;
 
-const MAX_PASSES: u32 = 32;
-
-#[inline]
-fn mix_colors(color1: u32, color2: u32, weight1: f32) -> u32 {
-    let weight2 = 1.0 - weight1;
-
-    255 << 24
-        | (((weight2 * ((color1 >> 16) & 0xff) as f32 + weight1 * ((color2 >> 16) & 0xff) as f32)
-            as u32)
-            << 16)
-        | (((weight2 * ((color1 >> 8) & 0xff) as f32 + weight1 * ((color2 >> 8) & 0xff) as f32)
-            as u32)
-            << 8)
-        | ((weight2 * (color1 & 0xff) as f32 + weight1 * (color2 & 0xff) as f32) as u32)
-}
+const MAX_PASSES: u32 = 64;
 
 fn main() {
     // Window setup
-    let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+    let mut buffer: Vec<Vec3> = vec![Vec3::zero(); WIDTH * HEIGHT];
 
     let mut window = Window::new(
         "Test - ESC to exit",
@@ -72,7 +58,7 @@ fn main() {
 
     // World setup
     let world = box_scene();
-    let mut pass: u32 = 0;
+    let mut pass: u32 = 1;
 
     // Render loop
     while window.is_open() && !window.is_key_down(Key::Escape) {
@@ -80,17 +66,32 @@ fn main() {
             pass += 1;
 
             // println!("done!");
-            buffer = buffer
-                .into_par_iter()
-                .zip_eq(render::render(WIDTH, HEIGHT, camera, &world).into_par_iter())
-                .map(|(c1, c2)| mix_colors(c1, c2, 1.0 / pass as f32))
-                .collect();
-            window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+            buffer = render::render(WIDTH, HEIGHT, camera, &world, &buffer);
+
+            window
+                .update_with_buffer(
+                    &(buffer
+                        .clone()
+                        .into_par_iter()
+                        .map(|color| to_rgb(color / pass as f32))
+                        .collect::<Vec<u32>>()),
+                    WIDTH,
+                    HEIGHT,
+                )
+                .unwrap();
             println!("finished pass {pass}");
         } else {
             window.update();
         }
     }
+}
+
+#[inline]
+fn to_rgb(color: Vec3) -> u32 {
+    255 << 24
+        | ((minifb::clamp(0.0, color.x.sqrt(), 0.99) * 255.4) as u32) << 16
+        | ((minifb::clamp(0.0, color.y.sqrt(), 0.99) * 255.4) as u32) << 8
+        | ((minifb::clamp(0.0, color.z.sqrt(), 0.99) * 255.4) as u32)
 }
 
 fn box_scene() -> World {
