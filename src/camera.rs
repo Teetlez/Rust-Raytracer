@@ -70,15 +70,15 @@ impl Camera {
         )
     }
 
-    pub fn update_lookat(&mut self, mouse_move: Option<(f32, f32)>) {}
+    pub fn update_lookat(&mut self, _mouse_move: Option<(f32, f32)>) {}
 
     pub fn update(&mut self, keys: Vec<minifb::Key>, mouse_move: Option<(f32, f32)>, scroll: f32) {
-        let h = ((self.fov as f32).to_radians() / 2.0).tan();
+        let h = (self.fov.to_radians() / 2.0).tan();
         let viewport_height: f32 = 2.0 * h;
         let viewport_width: f32 = (3.0 / 2.0) * viewport_height;
 
         if scroll != 0.0 {
-            self.focus_dist = self.focus_dist + (scroll / 12.0);
+            self.focus_dist += scroll / 12.0;
         }
 
         self.update_lookat(mouse_move);

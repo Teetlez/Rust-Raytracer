@@ -89,7 +89,7 @@ fn main() {
                     &buffer
                         .clone()
                         .into_par_iter()
-                        .map(|color| to_rgb(color))
+                        .map(to_rgb)
                         .collect::<Vec<u32>>(),
                     WIDTH,
                     HEIGHT,
@@ -106,7 +106,7 @@ fn main() {
             pass += 1;
 
             buffer = render::render(
-                WIDTH, HEIGHT, *camera, &world, &*buffer, SAMPLES, MAX_BOUNCE,
+                WIDTH, HEIGHT, *camera, &world, &buffer, SAMPLES, MAX_BOUNCE,
             );
 
             window

@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use ultraviolet::Vec3;
 
 fn ray_color(ray: Ray, world: &World, depth: u32) -> Vec3 {
-    if depth <= 0 {
+    if depth == 0 {
         return Vec3::new(0.0, 0.0, 0.0);
     }
 
@@ -53,7 +53,7 @@ pub fn render(
                 let x = screen_pos % width;
                 let mut pixel_color = Vec3::zero();
                 (0..sample_rate).for_each(|_| {
-                    pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), world, max_bounce);
+                    pixel_color += ray_color(camera.gen_ray(x, y), world, max_bounce);
                 });
 
                 buffer[screen_pos] + (pixel_color / sample_rate as f32)

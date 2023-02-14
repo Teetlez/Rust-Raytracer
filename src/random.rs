@@ -31,6 +31,7 @@ pub fn random_in_unit_disk() -> Vec3 {
     rand_disk
 }
 
+/*
 #[inline]
 pub fn random_unit_vector() -> Vec3 {
     random_in_unit_sphere().normalized()
@@ -44,3 +45,4 @@ pub fn random_in_hemisphere(normal: Vec3) -> Vec3 {
         -in_unit_sphere
     }
 }
+*/
