@@ -1,4 +1,4 @@
-use crate::vec3::Vec3;
+use ultraviolet::Vec3;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Ray {
@@ -10,7 +10,7 @@ impl Ray {
     pub fn new(pos: Vec3, dir: Vec3) -> Ray {
         Ray {
             pos,
-            dir: dir.normalize(),
+            dir: dir.normalized(),
         }
     }
 

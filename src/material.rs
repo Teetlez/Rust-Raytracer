@@ -1,4 +1,6 @@
-use crate::{hittable::HitRecord, ray::Ray, vec3::Vec3};
+use crate::{hittable::HitRecord, random::random_in_unit_sphere, ray::Ray};
+
+use ultraviolet::Vec3;
 
 #[derive(Copy, Clone)]
 pub struct Scatter {
@@ -19,7 +21,7 @@ pub struct Lambertian {
 
 impl Lambertian {
     pub fn scatter(self, _: Ray, hit: HitRecord) -> Scatter {
-        let target = hit.point + hit.normal + Vec3::random_in_unit_sphere();
+        let target = hit.point + hit.normal + random_in_unit_sphere();
         let attenuation = self.albedo;
         let scattered_ray = Ray::new(hit.point, target - hit.point);
         Scatter::new(attenuation, scattered_ray)
@@ -38,7 +40,7 @@ impl Metal {
             self.albedo,
             Ray::new(
                 hit.point,
-                ray.dir.reflect(hit.normal) + self.fuzz * Vec3::random_in_unit_sphere(),
+                ray.dir.reflected(hit.normal) + (self.fuzz * random_in_unit_sphere()),
             ),
         )
     }
@@ -46,43 +48,48 @@ impl Metal {
 
 #[derive(Copy, Clone)]
 pub struct Dielectric {
+    pub albedo: Vec3,
     pub refractive_index: f32,
 }
 
 fn schlick(cosine: f32, refractive_index: f32) -> f32 {
     let mut r0 = (1.0 - refractive_index) / (1.0 + refractive_index);
     r0 = r0 * r0;
-    r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)
+    minifb::clamp(0.0, r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0), 1.0)
 }
 
 impl Dielectric {
     pub fn scatter(self, ray: Ray, hit: HitRecord) -> Scatter {
-        let (outward_normal, ni_over_nt, cosine) = if ray.dir.dot(hit.normal) > 0.0 {
+        let (outward_normal, ni_over_nt, cosine, color) = if ray.dir.dot(hit.normal) > 0.0 {
             (
                 -hit.normal,
                 self.refractive_index,
-                self.refractive_index * ray.dir.dot(hit.normal) / ray.dir.length(),
+                self.refractive_index * ray.dir.dot(hit.normal) / ray.dir.mag(),
+                Vec3::new(
+                    f32::exp(-self.albedo.x * hit.t),
+                    f32::exp(-self.albedo.y * hit.t),
+                    f32::exp(-self.albedo.z * hit.t),
+                ),
             )
         } else {
             (
                 hit.normal,
                 1.0 / self.refractive_index,
-                -ray.dir.dot(hit.normal) / ray.dir.length(),
+                -ray.dir.dot(hit.normal) / ray.dir.mag(),
+                Vec3::one(),
             )
         };
-        if let Some(refracted) = ray.dir.refract(outward_normal, ni_over_nt) {
+        let refracted = ray.dir.refracted(outward_normal, ni_over_nt);
+        if refracted.mag_sq() != 0.0 {
             let reflection_prob = schlick(cosine, self.refractive_index);
             let out_dir = if fastrand::f32() < reflection_prob {
-                ray.dir.reflect(hit.normal)
+                ray.dir.reflected(outward_normal)
             } else {
                 refracted
             };
-            Scatter::new(Vec3::one(), Ray::new(hit.point, out_dir))
+            Scatter::new(color, Ray::new(hit.point, out_dir))
         } else {
-            Scatter::new(
-                Vec3::one(),
-                Ray::new(hit.point, ray.dir.reflect(hit.normal)),
-            )
+            Scatter::new(color, Ray::new(hit.point, ray.dir.reflected(hit.normal)))
         }
     }
 }
@@ -103,8 +110,11 @@ impl Material {
         Material::Metal(Metal { albedo, fuzz })
     }
 
-    pub fn dielectric(refractive_index: f32) -> Material {
-        Material::Dielectric(Dielectric { refractive_index })
+    pub fn dielectric(albedo: Vec3, refractive_index: f32) -> Material {
+        Material::Dielectric(Dielectric {
+            albedo,
+            refractive_index,
+        })
     }
 
     pub fn scatter(self, ray: Ray, hit: HitRecord) -> Scatter {

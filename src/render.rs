@@ -4,24 +4,31 @@ use crate::camera::Camera;
 use crate::hittable::World;
 use crate::material::Scatter;
 use crate::ray::Ray;
-use crate::{MAX_BOUNCE, SAMPLES};
-use minifb::clamp;
+
 use rayon::prelude::*;
+use ultraviolet::Vec3;
 
-use crate::vec3::Vec3;
-
-fn ray_color(ray: Ray, world: &World, depth: usize) -> Vec3 {
-    if depth >= MAX_BOUNCE {
+fn ray_color(ray: Ray, world: &World, depth: u32) -> Vec3 {
+    if depth <= 0 {
         return Vec3::new(0.0, 0.0, 0.0);
     }
 
-    if let Some(hit) = world.hit(&ray, 0.0005, INFINITY) {
+    if let Some(hit) = world.hit(&ray, 0.0002, INFINITY) {
         let scatter: Scatter = hit.material.scatter(ray, hit);
-        if scatter.attenuation.length_sq() <= 3.0 {
-            scatter.attenuation * ray_color(scatter.ray, world, depth + 1)
+        if scatter.attenuation.mag_sq() <= 4.0 {
+            scatter.attenuation * ray_color(scatter.ray, world, depth - 1)
         } else {
             scatter.attenuation
         }
+    } else {
+        let t = 0.5 * (ray.dir.y + 1.0);
+        (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
+    }
+}
+
+fn color_only(ray: Ray, world: &World) -> Vec3 {
+    if let Some(hit) = world.hit(&ray, 0.0002, INFINITY) {
+        (3.0 / hit.t) * hit.material.scatter(ray, hit).attenuation
     } else {
         let t = 0.5 * (ray.dir.y + 1.0);
         (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
@@ -33,7 +40,9 @@ pub fn render(
     height: usize,
     camera: Camera,
     world: &World,
-    buffer: &Vec<Vec3>,
+    buffer: &[Vec3],
+    sample_rate: u32,
+    max_bounce: u32,
 ) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
@@ -43,11 +52,26 @@ pub fn render(
                 let y = height - 1 - screen_pos / width;
                 let x = screen_pos % width;
                 let mut pixel_color = Vec3::zero();
-                (0..SAMPLES).for_each(|_| {
-                    pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), world, 0);
+                (0..sample_rate).for_each(|_| {
+                    pixel_color = pixel_color + ray_color(camera.gen_ray(x, y), world, max_bounce);
                 });
 
-                buffer[screen_pos] + (pixel_color / SAMPLES as f32)
+                buffer[screen_pos] + (pixel_color / sample_rate as f32)
+            },
+        )
+        .collect()
+}
+
+pub fn preview(width: usize, height: usize, camera: Camera, world: &World) -> Vec<Vec3> {
+    (0..width * height)
+        .into_par_iter()
+        .map_init(
+            || (),
+            |_, screen_pos| {
+                color_only(
+                    camera.gen_ray(screen_pos % width, height - 1 - screen_pos / width),
+                    world,
+                )
             },
         )
         .collect()

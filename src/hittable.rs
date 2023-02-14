@@ -1,4 +1,6 @@
-use crate::{material::Material, ray::Ray, vec3::Vec3};
+use crate::{material::Material, ray::Ray};
+
+use ultraviolet::{Vec3, Vec4};
 
 #[derive(Copy, Clone)]
 pub struct HitRecord<'obj> {
@@ -21,24 +23,22 @@ impl HitRecord<'_> {
 
 #[derive(Copy, Clone)]
 pub struct Sphere {
-    pub center: Vec3,
-    pub radius: f32,
+    pub center: Vec4,
     pub material: Material,
 }
 
 impl Sphere {
     pub fn new(center: Vec3, radius: f32, material: Material) -> Sphere {
         Sphere {
-            center,
-            radius,
+            center: Vec4::new(center.x, center.y, center.z, radius),
             material,
         }
     }
 
     pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
-        let oc = ray.pos - self.center;
+        let oc = ray.pos - self.center.truncated();
         let half_b = oc.dot(ray.dir);
-        let c = oc.length_sq() - (self.radius * self.radius);
+        let c = oc.mag_sq() - (self.center.w * self.center.w);
         let disc = half_b * half_b - c;
 
         if disc > 0.0 {
@@ -48,7 +48,7 @@ impl Sphere {
                 return Some(HitRecord::new(
                     temp,
                     hit_point,
-                    ((1.0 / self.radius) * (hit_point - self.center)).normalize(),
+                    ((1.0 / self.center.w) * (hit_point - self.center.truncated())).normalized(),
                     &self.material,
                 ));
             }
@@ -59,7 +59,7 @@ impl Sphere {
                 return Some(HitRecord::new(
                     temp,
                     hit_point,
-                    ((1.0 / self.radius) * (hit_point - self.center)).normalize(),
+                    ((1.0 / self.center.w) * (hit_point - self.center.truncated())).normalized(),
                     &self.material,
                 ));
             }
