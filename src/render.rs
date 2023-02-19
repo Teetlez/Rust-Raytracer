@@ -1,14 +1,15 @@
 use std::f32::INFINITY;
+use std::sync::Arc;
 
 use crate::camera::Camera;
-use crate::hittable::World;
+use crate::hittable::{Hittable, BVH};
 use crate::material::Scatter;
 use crate::ray::Ray;
 
 use rayon::prelude::*;
 use ultraviolet::Vec3;
 
-fn ray_color(ray: Ray, world: &World, depth: u32) -> Vec3 {
+fn ray_color(ray: Ray, world: Arc<BVH>, depth: u32) -> Vec3 {
     if depth == 0 {
         return Vec3::new(0.0, 0.0, 0.0);
     }
@@ -26,7 +27,7 @@ fn ray_color(ray: Ray, world: &World, depth: u32) -> Vec3 {
     }
 }
 
-fn color_only(ray: Ray, world: &World) -> Vec3 {
+fn color_only(ray: Ray, world: Arc<BVH>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, 0.0002, INFINITY) {
         (3.0 / hit.t) * hit.material.scatter(ray, hit).attenuation
     } else {
@@ -39,7 +40,7 @@ pub fn render(
     width: usize,
     height: usize,
     camera: Camera,
-    world: &World,
+    world: Arc<BVH>,
     buffer: &[Vec3],
     sample_rate: u32,
     max_bounce: u32,
@@ -53,7 +54,7 @@ pub fn render(
                 let x = screen_pos % width;
                 let mut pixel_color = Vec3::zero();
                 (0..sample_rate).for_each(|_| {
-                    pixel_color += ray_color(camera.gen_ray(x, y), world, max_bounce);
+                    pixel_color += ray_color(camera.gen_ray(x, y), world.clone(), max_bounce);
                 });
 
                 buffer[screen_pos] + (pixel_color / sample_rate as f32)
@@ -62,7 +63,7 @@ pub fn render(
         .collect()
 }
 
-pub fn preview(width: usize, height: usize, camera: Camera, world: &World) -> Vec<Vec3> {
+pub fn preview(width: usize, height: usize, camera: Camera, world: Arc<BVH>) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
         .map_init(
@@ -70,7 +71,7 @@ pub fn preview(width: usize, height: usize, camera: Camera, world: &World) -> Ve
             |_, screen_pos| {
                 color_only(
                     camera.gen_ray(screen_pos % width, height - 1 - screen_pos / width),
-                    world,
+                    world.clone(),
                 )
             },
         )

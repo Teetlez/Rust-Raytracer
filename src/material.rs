@@ -32,17 +32,20 @@ impl Lambertian {
 pub struct Metal {
     pub albedo: Vec3,
     pub fuzz: f32,
+    pub reflectance: f32,
 }
 
 impl Metal {
     pub fn scatter(self, ray: Ray, hit: HitRecord) -> Scatter {
-        Scatter::new(
-            self.albedo,
-            Ray::new(
-                hit.point,
-                ray.dir.reflected(hit.normal) + (self.fuzz * random_in_unit_sphere()),
-            ),
-        )
+        let out_dir = ray.dir.reflected(hit.normal)
+            + (self.fuzz
+                * (1.9
+                    - schlick(
+                        self.reflectance * ray.dir.dot(hit.normal) / ray.dir.mag(),
+                        self.reflectance,
+                    ))
+                * random_in_unit_sphere());
+        Scatter::new(self.albedo, Ray::new(hit.point, out_dir))
     }
 }
 
@@ -55,20 +58,21 @@ pub struct Dielectric {
 fn schlick(cosine: f32, refractive_index: f32) -> f32 {
     let mut r0 = (1.0 - refractive_index) / (1.0 + refractive_index);
     r0 = r0 * r0;
-    minifb::clamp(0.0, r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0), 1.0)
+    (r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)).clamp(0.0, 1.0)
 }
 
 impl Dielectric {
     pub fn scatter(self, ray: Ray, hit: HitRecord) -> Scatter {
         let (outward_normal, ni_over_nt, cosine, color) = if ray.dir.dot(hit.normal) > 0.0 {
+            let absorbance = self.albedo * -hit.t;
             (
                 -hit.normal,
                 self.refractive_index,
                 self.refractive_index * ray.dir.dot(hit.normal) / ray.dir.mag(),
                 Vec3::new(
-                    f32::exp(-self.albedo.x * hit.t),
-                    f32::exp(-self.albedo.y * hit.t),
-                    f32::exp(-self.albedo.z * hit.t),
+                    f32::exp(absorbance.x),
+                    f32::exp(absorbance.y),
+                    f32::exp(absorbance.z),
                 ),
             )
         } else {
@@ -76,7 +80,7 @@ impl Dielectric {
                 hit.normal,
                 1.0 / self.refractive_index,
                 -ray.dir.dot(hit.normal) / ray.dir.mag(),
-                Vec3::one(),
+                Vec3::one() * 0.9,
             )
         };
         let refracted = ray.dir.refracted(outward_normal, ni_over_nt);
@@ -89,7 +93,10 @@ impl Dielectric {
             };
             Scatter::new(color, Ray::new(hit.point, out_dir))
         } else {
-            Scatter::new(color, Ray::new(hit.point, ray.dir.reflected(hit.normal)))
+            Scatter::new(
+                color,
+                Ray::new(hit.point, ray.dir.reflected(outward_normal)),
+            )
         }
     }
 }
@@ -106,8 +113,12 @@ impl Material {
         Material::Lambertian(Lambertian { albedo })
     }
 
-    pub fn metal(albedo: Vec3, fuzz: f32) -> Material {
-        Material::Metal(Metal { albedo, fuzz })
+    pub fn metal(albedo: Vec3, fuzz: f32, reflectance: f32) -> Material {
+        Material::Metal(Metal {
+            albedo,
+            fuzz,
+            reflectance,
+        })
     }
 
     pub fn dielectric(albedo: Vec3, refractive_index: f32) -> Material {
