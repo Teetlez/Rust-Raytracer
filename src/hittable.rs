@@ -144,43 +144,44 @@ impl AABB {
 #[derive(Clone)]
 pub struct BVH {
     aabb_box: Arc<AABB>,
-    left: Arc<dyn Hittable + Send + Sync>,
-    right: Arc<dyn Hittable + Send + Sync>,
+    children: (
+        Arc<dyn Hittable + Send + Sync>,
+        Arc<dyn Hittable + Send + Sync>,
+    ),
 }
 
 impl BVH {
-    pub fn new(objects: &mut Vec<Arc<dyn Hittable + Send + Sync>>) -> BVH {
+    pub fn new(objects: &mut [Arc<dyn Hittable + Send + Sync>]) -> BVH {
         let axis = fastrand::usize(0..3);
 
-        objects.sort_by(|a, b| BVH::box_compare(a, b, axis));
+        objects.sort_by(|a, b| BVH::box_compare(a.clone(), b.clone(), axis));
         let n = objects.len();
         let (left, right): (
             Arc<dyn Hittable + Send + Sync>,
             Arc<dyn Hittable + Send + Sync>,
-        ) = match n {
-            1 => (Arc::clone(&objects[0]), Arc::clone(&objects[0])),
-            2 => (Arc::clone(&objects[0]), Arc::clone(&objects[1])),
-            _ => {
-                let mid = n / 2;
-                let left = Arc::new(BVH::new(&mut objects[0..mid].to_vec()));
-                let right = Arc::new(BVH::new(&mut objects[mid..n].to_vec()));
-                (left, right)
-            }
+        ) = if objects.len() <= 2 {
+            let left = Arc::clone(objects.first().unwrap());
+            let right = Arc::clone(objects.last().unwrap());
+            (left, right)
+        } else {
+            let mid = n / 2;
+            let left = Arc::new(BVH::new(&mut objects[..mid]));
+            let right = Arc::new(BVH::new(&mut objects[mid..]));
+            (left, right)
         };
         BVH {
             aabb_box: Arc::new(AABB::surrounding_box(
                 left.bounding_box(),
                 right.bounding_box(),
             )),
-            left,
-            right,
+            children: (left, right),
         }
     }
 
     #[inline]
     fn box_compare(
-        a: &Arc<dyn Hittable + Send + Sync>,
-        b: &Arc<dyn Hittable + Send + Sync>,
+        a: Arc<dyn Hittable + Send + Sync>,
+        b: Arc<dyn Hittable + Send + Sync>,
         axis: usize,
     ) -> Ordering {
         let box_a = a.bounding_box();
@@ -197,8 +198,8 @@ impl BVH {
 impl Hittable for BVH {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         if self.aabb_box.hit(ray, t_min, t_max) {
-            let hit_left = self.left.hit(ray, t_min, t_max);
-            let hit_right = self.right.hit(ray, t_min, t_max);
+            let hit_left = self.children.0.hit(ray, t_min, t_max);
+            let hit_right = self.children.1.hit(ray, t_min, t_max);
             match (hit_left, hit_right) {
                 (Some(hit_left), Some(hit_right)) => {
                     if hit_left.t < hit_right.t {

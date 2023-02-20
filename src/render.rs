@@ -1,4 +1,3 @@
-use std::f32::INFINITY;
 use std::sync::Arc;
 
 use crate::camera::Camera;
@@ -6,30 +5,39 @@ use crate::hittable::{Hittable, BVH};
 use crate::material::Scatter;
 use crate::ray::Ray;
 
-use rayon::prelude::*;
+use rayon::{prelude::*};
 use ultraviolet::Vec3;
 
+#[inline]
 fn ray_color(ray: Ray, world: Arc<BVH>, depth: u32) -> Vec3 {
-    if depth == 0 {
-        return Vec3::new(0.0, 0.0, 0.0);
-    }
-
-    if let Some(hit) = world.hit(&ray, 0.0002, INFINITY) {
-        let scatter: Scatter = hit.material.scatter(ray, hit);
-        if scatter.attenuation.mag_sq() <= 4.0 {
-            scatter.attenuation * ray_color(scatter.ray, world, depth - 1)
+    // if depth == 0 {
+    //     return Vec3::new(0.0, 0.0, 0.0);
+    // }
+    let mut color_total = Vec3::one();
+    let mut temp_ray = ray;
+    for _ in 0..depth {
+        if let Some(hit) = world.hit(&temp_ray, 0.0002, 1000.0) {
+            let scatter: Scatter = hit.material.scatter(temp_ray, hit);
+            if scatter.attenuation.mag_sq() <= 4.0 {
+                color_total *= scatter.attenuation;
+                temp_ray = scatter.ray;
+            } else {
+                color_total *= scatter.attenuation;
+                break;
+            }
         } else {
-            scatter.attenuation
+            let t = 0.5 * (ray.dir.y + 1.0);
+            color_total *= (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0);
+            break;
         }
-    } else {
-        let t = 0.5 * (ray.dir.y + 1.0);
-        (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
     }
+    color_total
 }
 
 fn color_only(ray: Ray, world: Arc<BVH>) -> Vec3 {
-    if let Some(hit) = world.hit(&ray, 0.0002, INFINITY) {
-        (3.0 / hit.t) * hit.material.scatter(ray, hit).attenuation
+    if let Some(hit) = world.hit(&ray, 0.0002, 100.0) {
+        ((2.0 + Vec3::unit_y().dot(hit.normal)) / hit.t)
+            * hit.material.scatter(ray, hit).attenuation
     } else {
         let t = 0.5 * (ray.dir.y + 1.0);
         (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
@@ -47,33 +55,40 @@ pub fn render(
 ) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
-        .map_init(
-            || (),
-            |_, screen_pos| {
-                let y = height - 1 - screen_pos / width;
-                let x = screen_pos % width;
-                let mut pixel_color = Vec3::zero();
-                (0..sample_rate).for_each(|_| {
-                    pixel_color += ray_color(camera.gen_ray(x, y), world.clone(), max_bounce);
-                });
+        .chunks((width * height) / 64)
+        .flat_map(|chunk| {
+            chunk
+                .iter()
+                .map(|pixel| {
+                    let y = height - 1 - pixel / width;
+                    let x = pixel % width;
+                    let mut pixel_color = Vec3::zero();
+                    (0..sample_rate).for_each(|_| {
+                        pixel_color += ray_color(camera.gen_ray(x, y), world.clone(), max_bounce);
+                    });
 
-                buffer[screen_pos] + (pixel_color / sample_rate as f32)
-            },
-        )
+                    buffer[*pixel] + (pixel_color / sample_rate as f32)
+                })
+                .collect::<Vec<Vec3>>()
+        })
         .collect()
 }
 
+#[inline]
 pub fn preview(width: usize, height: usize, camera: Camera, world: Arc<BVH>) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
-        .map_init(
-            || (),
-            |_, screen_pos| {
-                color_only(
-                    camera.gen_ray(screen_pos % width, height - 1 - screen_pos / width),
-                    world.clone(),
-                )
-            },
-        )
+        .chunks((width * height) / 64)
+        .flat_map(|chunk| {
+            chunk
+                .iter()
+                .map(|pixel| {
+                    color_only(
+                        camera.gen_ray(pixel % width, height - 1 - pixel / width),
+                        world.clone(),
+                    )
+                })
+                .collect::<Vec<Vec3>>()
+        })
         .collect()
 }

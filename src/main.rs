@@ -10,7 +10,6 @@ mod render;
 
 extern crate minifb;
 extern crate ultraviolet;
-
 use std::sync::Arc;
 
 use camera::Camera;
@@ -20,14 +19,14 @@ use minifb::{Key, Window, WindowOptions};
 use random::random_vec;
 use ultraviolet::Vec3;
 
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 const ASPECT_RATIO: f32 = 3.0 / 2.0;
 
-const WIDTH: usize = 800;
+const WIDTH: usize = 400;
 const HEIGHT: usize = (WIDTH as f32 / ASPECT_RATIO) as usize;
 
-const SAMPLES: u32 = 128;
+const SAMPLES: u32 = 32;
 
 const MAX_BOUNCE: u32 = 8;
 
@@ -85,45 +84,45 @@ fn main() {
                 window.set_cursor_visibility(true);
                 window.set_cursor_style(minifb::CursorStyle::Arrow);
             }
+            if window.is_key_pressed(Key::Enter, minifb::KeyRepeat::Yes) {
+                println!("Rendering with {MAX_PASSES} passes");
+                buffer = vec![Vec3::zero(); WIDTH * HEIGHT];
+                break;
+            }
             buffer = render::preview(WIDTH, HEIGHT, *camera, world.clone());
             window
                 .update_with_buffer(
-                    &buffer
-                        .clone()
-                        .into_par_iter()
+                    buffer
+                        .par_iter()
                         .map(to_rgb)
-                        .collect::<Vec<u32>>(),
+                        .collect::<Vec<u32>>()
+                        .as_slice(),
                     WIDTH,
                     HEIGHT,
                 )
                 .unwrap();
-            buffer = vec![Vec3::zero(); WIDTH * HEIGHT];
             pass = 0;
-            if window.is_key_pressed(Key::Enter, minifb::KeyRepeat::Yes) {
-                println!("Rendering with {MAX_PASSES} passes");
-                break;
-            }
         }
         if pass <= MAX_PASSES && window.is_open() {
             pass += 1;
-
+            println!("rendering...");
             buffer = render::render(
                 WIDTH,
                 HEIGHT,
                 *camera,
                 world.clone(),
-                &buffer,
+                &mut buffer,
                 SAMPLES,
                 MAX_BOUNCE,
             );
-
+            println!("writing to buffer");
             window
                 .update_with_buffer(
-                    &buffer
-                        .clone()
-                        .into_par_iter()
-                        .map(|color| to_rgb(color / pass as f32))
-                        .collect::<Vec<u32>>(),
+                    buffer
+                        .par_iter()
+                        .map(|color| to_rgb(&(*color / pass as f32)))
+                        .collect::<Vec<u32>>()
+                        .as_slice(),
                     WIDTH,
                     HEIGHT,
                 )
@@ -136,7 +135,7 @@ fn main() {
 }
 
 #[inline]
-fn to_rgb(color: Vec3) -> u32 {
+fn to_rgb(color: &Vec3) -> u32 {
     255 << 24
         | ((minifb::clamp(0.0, color.x.powf(1.0 / 2.2), 0.999) * 255.4) as u32) << 16
         | ((minifb::clamp(0.0, color.y.powf(1.0 / 2.2), 0.999) * 255.4) as u32) << 8
