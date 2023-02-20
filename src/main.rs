@@ -13,7 +13,7 @@ extern crate ultraviolet;
 use std::sync::Arc;
 
 use camera::Camera;
-use hittable::{Hittable, Sphere, BVH};
+use hittable::{Bvh, Hittable, Sphere};
 use material::Material;
 use minifb::{Key, Window, WindowOptions};
 use random::random_vec;
@@ -111,7 +111,7 @@ fn main() {
                 HEIGHT,
                 *camera,
                 world.clone(),
-                &mut buffer,
+                buffer.as_slice(),
                 SAMPLES,
                 MAX_BOUNCE,
             );
@@ -142,7 +142,7 @@ fn to_rgb(color: &Vec3) -> u32 {
         | ((minifb::clamp(0.0, color.z.powf(1.0 / 2.2), 0.999) * 255.4) as u32)
 }
 
-fn box_scene() -> BVH {
+fn box_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
 
     let glass = Material::dielectric(Vec3::new(0.6, 0.1, 0.2), 1.51);
@@ -199,11 +199,11 @@ fn box_scene() -> BVH {
         500.0,
         diffuse_black,
     )));
-    BVH::new(&mut world)
+    Bvh::new(&mut world)
 }
 
 #[ignore]
-fn random_scene() -> BVH {
+fn random_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
     let ground: Material = Material::lambertian(0.5 * Vec3::one());
     world.push(Arc::new(Sphere::new(
@@ -265,5 +265,5 @@ fn random_scene() -> BVH {
     )));
     world.push(Arc::new(Sphere::new(Vec3::new(4.0, 1.0, 0.0), 1.0, steel)));
 
-    BVH::new(&mut world)
+    Bvh::new(&mut world)
 }

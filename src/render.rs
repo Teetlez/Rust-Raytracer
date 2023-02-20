@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
 use crate::camera::Camera;
-use crate::hittable::{Hittable, BVH};
+use crate::hittable::{Bvh, Hittable};
 use crate::material::Scatter;
 use crate::ray::Ray;
 
-use rayon::{prelude::*};
+use rayon::prelude::*;
 use ultraviolet::Vec3;
 
 #[inline]
-fn ray_color(ray: Ray, world: Arc<BVH>, depth: u32) -> Vec3 {
+fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
     // if depth == 0 {
     //     return Vec3::new(0.0, 0.0, 0.0);
     // }
@@ -34,7 +34,7 @@ fn ray_color(ray: Ray, world: Arc<BVH>, depth: u32) -> Vec3 {
     color_total
 }
 
-fn color_only(ray: Ray, world: Arc<BVH>) -> Vec3 {
+fn color_only(ray: Ray, world: Arc<Bvh>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, 0.0002, 100.0) {
         ((2.0 + Vec3::unit_y().dot(hit.normal)) / hit.t)
             * hit.material.scatter(ray, hit).attenuation
@@ -48,7 +48,7 @@ pub fn render(
     width: usize,
     height: usize,
     camera: Camera,
-    world: Arc<BVH>,
+    world: Arc<Bvh>,
     buffer: &[Vec3],
     sample_rate: u32,
     max_bounce: u32,
@@ -75,7 +75,7 @@ pub fn render(
 }
 
 #[inline]
-pub fn preview(width: usize, height: usize, camera: Camera, world: Arc<BVH>) -> Vec<Vec3> {
+pub fn preview(width: usize, height: usize, camera: Camera, world: Arc<Bvh>) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
         .chunks((width * height) / 64)

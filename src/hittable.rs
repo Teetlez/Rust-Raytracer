@@ -7,7 +7,7 @@ use ultraviolet::{Vec3, Vec4};
 pub trait Hittable {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>>;
 
-    fn bounding_box(&self) -> AABB;
+    fn bounding_box(&self) -> Aabb;
 }
 
 #[derive(Copy, Clone)]
@@ -77,8 +77,8 @@ impl Hittable for Sphere {
         None
     }
 
-    fn bounding_box(&self) -> AABB {
-        AABB {
+    fn bounding_box(&self) -> Aabb {
+        Aabb {
             minimum: self.center.truncated()
                 - Vec3::new(self.center.w, self.center.w, self.center.w),
             maximum: self.center.truncated()
@@ -88,14 +88,14 @@ impl Hittable for Sphere {
 }
 
 #[derive(Copy, Clone)]
-pub struct AABB {
+pub struct Aabb {
     minimum: Vec3,
     maximum: Vec3,
 }
 
-impl AABB {
-    pub fn new(min: Vec3, max: Vec3) -> AABB {
-        AABB {
+impl Aabb {
+    pub fn new(min: Vec3, max: Vec3) -> Aabb {
+        Aabb {
             minimum: min,
             maximum: max,
         }
@@ -124,7 +124,7 @@ impl AABB {
     }
 
     #[inline]
-    pub fn surrounding_box(box1: AABB, box2: AABB) -> AABB {
+    pub fn surrounding_box(box1: Aabb, box2: Aabb) -> Aabb {
         let small = Vec3::new(
             f32::min(box1.minimum.x, box2.minimum.x),
             f32::min(box1.minimum.y, box2.minimum.y),
@@ -137,24 +137,24 @@ impl AABB {
             f32::max(box1.maximum.z, box2.maximum.z),
         );
 
-        AABB::new(small, big)
+        Aabb::new(small, big)
     }
 }
 
 #[derive(Clone)]
-pub struct BVH {
-    aabb_box: Arc<AABB>,
+pub struct Bvh {
+    aabb_box: Arc<Aabb>,
     children: (
         Arc<dyn Hittable + Send + Sync>,
         Arc<dyn Hittable + Send + Sync>,
     ),
 }
 
-impl BVH {
-    pub fn new(objects: &mut [Arc<dyn Hittable + Send + Sync>]) -> BVH {
+impl Bvh {
+    pub fn new(objects: &mut [Arc<dyn Hittable + Send + Sync>]) -> Bvh {
         let axis = fastrand::usize(0..3);
 
-        objects.sort_by(|a, b| BVH::box_compare(a.clone(), b.clone(), axis));
+        objects.sort_by(|a, b| Bvh::box_compare(a.clone(), b.clone(), axis));
         let n = objects.len();
         let (left, right): (
             Arc<dyn Hittable + Send + Sync>,
@@ -165,12 +165,12 @@ impl BVH {
             (left, right)
         } else {
             let mid = n / 2;
-            let left = Arc::new(BVH::new(&mut objects[..mid]));
-            let right = Arc::new(BVH::new(&mut objects[mid..]));
+            let left = Arc::new(Bvh::new(&mut objects[..mid]));
+            let right = Arc::new(Bvh::new(&mut objects[mid..]));
             (left, right)
         };
-        BVH {
-            aabb_box: Arc::new(AABB::surrounding_box(
+        Bvh {
+            aabb_box: Arc::new(Aabb::surrounding_box(
                 left.bounding_box(),
                 right.bounding_box(),
             )),
@@ -195,7 +195,7 @@ impl BVH {
     }
 }
 
-impl Hittable for BVH {
+impl Hittable for Bvh {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         if self.aabb_box.hit(ray, t_min, t_max) {
             let hit_left = self.children.0.hit(ray, t_min, t_max);
@@ -218,7 +218,7 @@ impl Hittable for BVH {
     }
 
     #[inline]
-    fn bounding_box(&self) -> AABB {
+    fn bounding_box(&self) -> Aabb {
         *self.aabb_box
     }
 }
