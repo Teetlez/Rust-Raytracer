@@ -58,7 +58,7 @@ pub struct Dielectric {
 fn schlick(cosine: f32, refractive_index: f32) -> f32 {
     let mut r0 = (1.0 - refractive_index) / (1.0 + refractive_index);
     r0 = r0 * r0;
-    (r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)).clamp(0.0, 1.0)
+    (r0 + (1.0 - r0) * (1.0 - cosine).powi(5)).clamp(0.0, 1.0)
 }
 
 impl Dielectric {
@@ -67,8 +67,8 @@ impl Dielectric {
             let absorbance = self.albedo * -hit.t;
             (
                 -hit.normal,
-                self.refractive_index,
-                self.refractive_index * ray.dir.dot(hit.normal) / ray.dir.mag(),
+                self.refractive_index / 1.00028,
+                ((-ray.dir).dot(-hit.normal)).min(1.0),
                 Vec3::new(
                     f32::exp(absorbance.x),
                     f32::exp(absorbance.y),
@@ -78,18 +78,17 @@ impl Dielectric {
         } else {
             (
                 hit.normal,
-                1.0 / self.refractive_index,
-                -ray.dir.dot(hit.normal) / ray.dir.mag(),
+                1.00028 / self.refractive_index,
+                ((-ray.dir).dot(hit.normal)).min(1.0),
                 Vec3::one() * 0.9,
             )
         };
-        let refracted = ray.dir.refracted(outward_normal, ni_over_nt);
-        if refracted.mag_sq() != 0.0 {
-            let reflection_prob = schlick(cosine, self.refractive_index);
+        if ni_over_nt * (1.0 - (cosine * cosine)).sqrt() <= 1.0 {
+            let reflection_prob = schlick(cosine, ni_over_nt);
             let out_dir = if fastrand::f32() < reflection_prob {
                 ray.dir.reflected(outward_normal)
             } else {
-                refracted
+                ray.dir.refracted(outward_normal, ni_over_nt)
             };
             Scatter::new(color, Ray::new(hit.point, out_dir))
         } else {
@@ -109,21 +108,23 @@ pub enum Material {
 }
 
 impl Material {
-    pub fn lambertian(albedo: Vec3) -> Material {
-        Material::Lambertian(Lambertian { albedo })
+    pub fn lambertian(albedo: (f32, f32, f32)) -> Material {
+        Material::Lambertian(Lambertian {
+            albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
+        })
     }
 
-    pub fn metal(albedo: Vec3, fuzz: f32, reflectance: f32) -> Material {
+    pub fn metal(albedo: (f32, f32, f32), fuzz: f32, reflectance: f32) -> Material {
         Material::Metal(Metal {
-            albedo,
+            albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
             fuzz,
             reflectance,
         })
     }
 
-    pub fn dielectric(albedo: Vec3, refractive_index: f32) -> Material {
+    pub fn dielectric(albedo: (f32, f32, f32), refractive_index: f32) -> Material {
         Material::Dielectric(Dielectric {
-            albedo,
+            albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
             refractive_index,
         })
     }

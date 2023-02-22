@@ -1,3 +1,4 @@
+use std::f32::INFINITY;
 use std::sync::Arc;
 
 use crate::camera::Camera;
@@ -16,7 +17,7 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
     for _ in 0..depth {
-        if let Some(hit) = world.hit(&temp_ray, 0.0002, 1000.0) {
+        if let Some(hit) = world.hit(&temp_ray, 0.00015, INFINITY) {
             let scatter: Scatter = hit.material.scatter(temp_ray, hit);
             if scatter.attenuation.mag_sq() <= 4.0 {
                 color_total *= scatter.attenuation;
@@ -35,7 +36,7 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
 }
 
 fn color_only(ray: Ray, world: Arc<Bvh>) -> Vec3 {
-    if let Some(hit) = world.hit(&ray, 0.0002, 100.0) {
+    if let Some(hit) = world.hit(&ray, 0.00015, 100.0) {
         ((2.0 + Vec3::unit_y().dot(hit.normal)) / hit.t)
             * hit.material.scatter(ray, hit).attenuation
     } else {

@@ -36,9 +36,9 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material: Material) -> Sphere {
+    pub fn new(center: (f32, f32, f32), radius: f32, material: Material) -> Sphere {
         Sphere {
-            center: Vec4::new(center.x, center.y, center.z, radius),
+            center: Vec4::new(center.0, center.1, center.2, radius),
             material,
         }
     }
@@ -52,7 +52,8 @@ impl Hittable for Sphere {
         let disc = half_b * half_b - c;
 
         if disc > 0.0 {
-            let mut temp = -half_b - (half_b * half_b - c).sqrt();
+            let h = disc.sqrt();
+            let mut temp = -half_b - h;
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
                 return Some(HitRecord::new(
@@ -63,7 +64,7 @@ impl Hittable for Sphere {
                 ));
             }
 
-            temp = -half_b + (half_b * half_b - c).sqrt();
+            temp = -half_b + h;
             if temp < t_max && temp > t_min {
                 let hit_point = ray.at(temp);
                 return Some(HitRecord::new(
@@ -87,6 +88,89 @@ impl Hittable for Sphere {
     }
 }
 
+pub struct ABox {
+    pub minimum: Vec3,
+    pub maximum: Vec3,
+    pub material: Material,
+}
+
+impl ABox {
+    pub fn new(center: (f32, f32, f32), size: (f32, f32, f32), mat: Material) -> ABox {
+        ABox {
+            minimum: Vec3::new(
+                center.0 - (size.0 * 0.5),
+                center.1 - (size.1 * 0.5),
+                center.2 - (size.2 * 0.5),
+            ),
+            maximum: Vec3::new(
+                center.0 + (size.0 * 0.5),
+                center.1 + (size.1 * 0.5),
+                center.2 + (size.2 * 0.5),
+            ),
+            material: mat,
+        }
+    }
+}
+
+impl Hittable for ABox {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        let mut t_near = f32::NEG_INFINITY;
+        let mut t_far = f32::INFINITY;
+        for a in 0..3 {
+            if ray.dir[a].abs() < f32::EPSILON {
+                if ray.pos[a] < self.minimum[a] || ray.pos[a] > self.maximum[a] {
+                    return None;
+                }
+            } else {
+                let inv_d = ray.dir[a].recip();
+                let (t0, t1) = if inv_d < 0.0 {
+                    (
+                        ((self.maximum[a] - ray.pos[a]) * inv_d),
+                        ((self.minimum[a] - ray.pos[a]) * inv_d),
+                    )
+                } else {
+                    (
+                        ((self.minimum[a] - ray.pos[a]) * inv_d),
+                        ((self.maximum[a] - ray.pos[a]) * inv_d),
+                    )
+                };
+                t_near = t_near.max(t0);
+                t_far = t_far.min(t1);
+                if t_near > t_far {
+                    return None;
+                }
+            }
+        }
+        let t = if t_near > t_min {
+            t_near
+        } else if t_far < t_max {
+            t_far
+        } else {
+            return None;
+        };
+        let p = ray.at(t);
+        let normal = {
+            let mut n = Vec3::zero();
+            (0..3).for_each(|a| {
+                if (p[a] - self.minimum[a]).abs() < 0.0001 {
+                    n[a] = -1.0;
+                } else if (p[a] - self.maximum[a]).abs() < 0.0001 {
+                    n[a] = 1.0;
+                }
+            });
+            n
+        };
+        Some(HitRecord::new(t, p, normal.normalized(), &self.material))
+    }
+
+    fn bounding_box(&self) -> Aabb {
+        Aabb {
+            minimum: self.minimum,
+            maximum: self.maximum,
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Aabb {
     minimum: Vec3,
@@ -103,8 +187,8 @@ impl Aabb {
 
     #[inline]
     pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> bool {
-        for a in 0..3 {
-            let inv_d = 1.0 / ray.dir[a];
+        (0..3).all(|a| {
+            let inv_d = ray.dir[a].recip();
             let (t0, t1) = if inv_d < 0.0 {
                 (
                     ((self.maximum[a] - ray.pos[a]) * inv_d),
@@ -116,25 +200,22 @@ impl Aabb {
                     ((self.maximum[a] - ray.pos[a]) * inv_d),
                 )
             };
-            if f32::min(t1, t_max) <= f32::max(t0, t_min) {
-                return false;
-            }
-        }
-        true
+            t1.min(t_max) > t0.max(t_min)
+        })
     }
 
     #[inline]
     pub fn surrounding_box(box1: Aabb, box2: Aabb) -> Aabb {
         let small = Vec3::new(
-            f32::min(box1.minimum.x, box2.minimum.x),
-            f32::min(box1.minimum.y, box2.minimum.y),
-            f32::min(box1.minimum.z, box2.minimum.z),
+            f32::min(box1.minimum.x, box2.minimum.x) - f32::EPSILON,
+            f32::min(box1.minimum.y, box2.minimum.y) - f32::EPSILON,
+            f32::min(box1.minimum.z, box2.minimum.z) - f32::EPSILON,
         );
 
         let big = Vec3::new(
-            f32::max(box1.maximum.x, box2.maximum.x),
-            f32::max(box1.maximum.y, box2.maximum.y),
-            f32::max(box1.maximum.z, box2.maximum.z),
+            f32::max(box1.maximum.x, box2.maximum.x) + f32::EPSILON,
+            f32::max(box1.maximum.y, box2.maximum.y) + f32::EPSILON,
+            f32::max(box1.maximum.z, box2.maximum.z) + f32::EPSILON,
         );
 
         Aabb::new(small, big)
@@ -145,35 +226,49 @@ impl Aabb {
 pub struct Bvh {
     aabb_box: Arc<Aabb>,
     children: (
-        Arc<dyn Hittable + Send + Sync>,
-        Arc<dyn Hittable + Send + Sync>,
+        Option<Arc<dyn Hittable + Send + Sync>>,
+        Option<Arc<dyn Hittable + Send + Sync>>,
     ),
 }
 
 impl Bvh {
     pub fn new(objects: &mut [Arc<dyn Hittable + Send + Sync>]) -> Bvh {
-        let axis = fastrand::usize(0..3);
+        let axis = 0;
+        //fastrand::usize(0..3);
 
         objects.sort_by(|a, b| Bvh::box_compare(a.clone(), b.clone(), axis));
         let n = objects.len();
-        let (left, right): (
-            Arc<dyn Hittable + Send + Sync>,
-            Arc<dyn Hittable + Send + Sync>,
-        ) = if objects.len() <= 2 {
-            let left = Arc::clone(objects.first().unwrap());
-            let right = Arc::clone(objects.last().unwrap());
-            (left, right)
-        } else {
-            let mid = n / 2;
-            let left = Arc::new(Bvh::new(&mut objects[..mid]));
-            let right = Arc::new(Bvh::new(&mut objects[mid..]));
-            (left, right)
+        let (left, right): (Option<Arc<_>>, Option<Arc<_>>) = match n {
+            0 => (None, None),
+            1 => (Some(Arc::clone(objects.first().unwrap())), None),
+            2 => {
+                let left = Some(Arc::clone(objects.first().unwrap()));
+                let right = Some(Arc::clone(objects.last().unwrap()));
+                (left, right)
+            }
+            // 3 => {
+            //     let left = Arc::new(Bvh::new(&mut objects[0..2]));
+            //     let right = Some(Arc::clone(objects.last().unwrap()));
+            //     (Some(left), right)
+            // }
+            _ => {
+                let mid = n / 2;
+                let left = Arc::new(Bvh::new(&mut objects[..mid]));
+                let right = Arc::new(Bvh::new(&mut objects[mid..]));
+                (Some(left), Some(right))
+            }
         };
+
+        let surrounding = Arc::new(match (left.clone(), right.clone()) {
+            (Some(left), None) => Aabb::surrounding_box(left.bounding_box(), left.bounding_box()),
+            (Some(left), Some(right)) => {
+                Aabb::surrounding_box(left.bounding_box(), right.bounding_box())
+            }
+            (_, _) => panic!(),
+        });
+
         Bvh {
-            aabb_box: Arc::new(Aabb::surrounding_box(
-                left.bounding_box(),
-                right.bounding_box(),
-            )),
+            aabb_box: surrounding,
             children: (left, right),
         }
     }
@@ -184,13 +279,15 @@ impl Bvh {
         b: Arc<dyn Hittable + Send + Sync>,
         axis: usize,
     ) -> Ordering {
-        let box_a = a.bounding_box();
-        let box_b = b.bounding_box();
+        let center_a = (a.bounding_box().maximum - a.bounding_box().minimum) * 0.5;
+        let center_b = (b.bounding_box().maximum - b.bounding_box().minimum) * 0.5;
 
-        if box_a.minimum[axis] < box_b.maximum[axis] {
+        if center_a[axis] < center_b[axis] {
             Ordering::Less
-        } else {
+        } else if center_a[axis] > center_b[axis] {
             Ordering::Greater
+        } else {
+            Ordering::Equal
         }
     }
 }
@@ -198,23 +295,23 @@ impl Bvh {
 impl Hittable for Bvh {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         if self.aabb_box.hit(ray, t_min, t_max) {
-            let hit_left = self.children.0.hit(ray, t_min, t_max);
-            let hit_right = self.children.1.hit(ray, t_min, t_max);
-            match (hit_left, hit_right) {
-                (Some(hit_left), Some(hit_right)) => {
-                    if hit_left.t < hit_right.t {
-                        Some(hit_left)
+            if let Some(child_left) = self.children.0.as_ref() {
+                return if let Some(child_right) = self.children.1.as_ref() {
+                    if let Some(left) = child_left.hit(ray, t_min, t_max) {
+                        if let Some(right) = child_right.hit(ray, t_min, left.t) {
+                            Some(right)
+                        } else {
+                            Some(left)
+                        }
                     } else {
-                        Some(hit_right)
+                        child_right.hit(ray, t_min, t_max)
                     }
-                }
-                (Some(hit), None) => Some(hit),
-                (None, Some(hit)) => Some(hit),
-                (_, _) => None,
+                } else {
+                    child_left.hit(ray, t_min, t_max)
+                };
             }
-        } else {
-            None
         }
+        None
     }
 
     #[inline]
