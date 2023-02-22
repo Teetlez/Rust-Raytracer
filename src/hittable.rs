@@ -80,29 +80,27 @@ impl Hittable for Sphere {
 
     fn bounding_box(&self) -> Aabb {
         Aabb {
-            minimum: self.center.truncated()
-                - Vec3::new(self.center.w, self.center.w, self.center.w),
-            maximum: self.center.truncated()
-                + Vec3::new(self.center.w, self.center.w, self.center.w),
+            min: self.center.truncated() - Vec3::new(self.center.w, self.center.w, self.center.w),
+            max: self.center.truncated() + Vec3::new(self.center.w, self.center.w, self.center.w),
         }
     }
 }
 
 pub struct ABox {
-    pub minimum: Vec3,
-    pub maximum: Vec3,
+    pub min: Vec3,
+    pub max: Vec3,
     pub material: Material,
 }
 
 impl ABox {
     pub fn new(center: (f32, f32, f32), size: (f32, f32, f32), mat: Material) -> ABox {
         ABox {
-            minimum: Vec3::new(
+            min: Vec3::new(
                 center.0 - (size.0 * 0.5),
                 center.1 - (size.1 * 0.5),
                 center.2 - (size.2 * 0.5),
             ),
-            maximum: Vec3::new(
+            max: Vec3::new(
                 center.0 + (size.0 * 0.5),
                 center.1 + (size.1 * 0.5),
                 center.2 + (size.2 * 0.5),
@@ -114,111 +112,115 @@ impl ABox {
 
 impl Hittable for ABox {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        let mut t_near = f32::NEG_INFINITY;
-        let mut t_far = f32::INFINITY;
-        for a in 0..3 {
+        let mut t_near = t_min;
+        let mut t_far = t_max;
+        if (0..3).all(|a| {
             if ray.dir[a].abs() < f32::EPSILON {
-                if ray.pos[a] < self.minimum[a] || ray.pos[a] > self.maximum[a] {
-                    return None;
-                }
+                ray.pos[a] > self.min[a] && ray.pos[a] < self.max[a]
             } else {
                 let inv_d = ray.dir[a].recip();
                 let (t0, t1) = if inv_d < 0.0 {
                     (
-                        ((self.maximum[a] - ray.pos[a]) * inv_d),
-                        ((self.minimum[a] - ray.pos[a]) * inv_d),
+                        ((self.max[a] - ray.pos[a]) * inv_d),
+                        ((self.min[a] - ray.pos[a]) * inv_d),
                     )
                 } else {
                     (
-                        ((self.minimum[a] - ray.pos[a]) * inv_d),
-                        ((self.maximum[a] - ray.pos[a]) * inv_d),
+                        ((self.min[a] - ray.pos[a]) * inv_d),
+                        ((self.max[a] - ray.pos[a]) * inv_d),
                     )
                 };
                 t_near = t_near.max(t0);
                 t_far = t_far.min(t1);
-                if t_near > t_far {
-                    return None;
-                }
+                t_near < t_far
             }
-        }
-        let t = if t_near > t_min {
-            t_near
-        } else if t_far < t_max {
-            t_far
+        }) {
+            let t = if t_near > t_min {
+                t_near
+            } else if t_far < t_max {
+                t_far
+            } else {
+                return None;
+            };
+            let p = ray.at(t);
+            let normal = {
+                let mut n = Vec3::zero();
+                (0..3).for_each(|a| {
+                    if (p[a] - self.min[a]).abs() < 0.0001 {
+                        n[a] = -1.0;
+                    } else if (p[a] - self.max[a]).abs() < 0.0001 {
+                        n[a] = 1.0;
+                    }
+                });
+                n
+            };
+            Some(HitRecord::new(t, p, normal.normalized(), &self.material))
         } else {
-            return None;
-        };
-        let p = ray.at(t);
-        let normal = {
-            let mut n = Vec3::zero();
-            (0..3).for_each(|a| {
-                if (p[a] - self.minimum[a]).abs() < 0.0001 {
-                    n[a] = -1.0;
-                } else if (p[a] - self.maximum[a]).abs() < 0.0001 {
-                    n[a] = 1.0;
-                }
-            });
-            n
-        };
-        Some(HitRecord::new(t, p, normal.normalized(), &self.material))
+            None
+        }
     }
 
     fn bounding_box(&self) -> Aabb {
         Aabb {
-            minimum: self.minimum,
-            maximum: self.maximum,
+            min: self.min,
+            max: self.max,
         }
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Aabb {
-    minimum: Vec3,
-    maximum: Vec3,
+    min: Vec3,
+    max: Vec3,
 }
 
 impl Aabb {
     pub fn new(min: Vec3, max: Vec3) -> Aabb {
-        Aabb {
-            minimum: min,
-            maximum: max,
-        }
+        Aabb { min, max }
     }
 
     #[inline]
     pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> bool {
+        let mut t_near = t_min;
+        let mut t_far = t_max;
         (0..3).all(|a| {
-            let inv_d = ray.dir[a].recip();
-            let (t0, t1) = if inv_d < 0.0 {
-                (
-                    ((self.maximum[a] - ray.pos[a]) * inv_d),
-                    ((self.minimum[a] - ray.pos[a]) * inv_d),
-                )
+            if ray.dir[a].abs() <= f32::EPSILON {
+                ray.pos[a] > self.min[a] && ray.pos[a] < self.max[a]
             } else {
-                (
-                    ((self.minimum[a] - ray.pos[a]) * inv_d),
-                    ((self.maximum[a] - ray.pos[a]) * inv_d),
-                )
-            };
-            t1.min(t_max) > t0.max(t_min)
+                let inv_d = ray.dir[a].recip();
+                let (t0, t1) = if inv_d < 0.0 {
+                    (
+                        ((self.max[a] - ray.pos[a]) * inv_d),
+                        ((self.min[a] - ray.pos[a]) * inv_d),
+                    )
+                } else {
+                    (
+                        ((self.min[a] - ray.pos[a]) * inv_d),
+                        ((self.max[a] - ray.pos[a]) * inv_d),
+                    )
+                };
+                t_near = t_near.max(t0);
+                t_far = t_far.min(t1);
+                t_near < t_far
+            }
         })
     }
 
     #[inline]
     pub fn surrounding_box(box1: Aabb, box2: Aabb) -> Aabb {
-        let small = Vec3::new(
-            f32::min(box1.minimum.x, box2.minimum.x) - f32::EPSILON,
-            f32::min(box1.minimum.y, box2.minimum.y) - f32::EPSILON,
-            f32::min(box1.minimum.z, box2.minimum.z) - f32::EPSILON,
+        let min = Vec3::new(
+            f32::min(box1.min.x, box2.min.x) - f32::EPSILON,
+            f32::min(box1.min.y, box2.min.y) - f32::EPSILON,
+            f32::min(box1.min.z, box2.min.z) - f32::EPSILON,
         );
 
-        let big = Vec3::new(
-            f32::max(box1.maximum.x, box2.maximum.x) + f32::EPSILON,
-            f32::max(box1.maximum.y, box2.maximum.y) + f32::EPSILON,
-            f32::max(box1.maximum.z, box2.maximum.z) + f32::EPSILON,
+        let max = Vec3::new(
+            f32::max(box1.max.x, box2.max.x) + f32::EPSILON,
+            f32::max(box1.max.y, box2.max.y) + f32::EPSILON,
+            f32::max(box1.max.z, box2.max.z) + f32::EPSILON,
         );
 
-        Aabb::new(small, big)
+        Aabb::new(min, max)
     }
 }
 
@@ -246,11 +248,11 @@ impl Bvh {
                 let right = Some(Arc::clone(objects.last().unwrap()));
                 (left, right)
             }
-            // 3 => {
-            //     let left = Arc::new(Bvh::new(&mut objects[0..2]));
-            //     let right = Some(Arc::clone(objects.last().unwrap()));
-            //     (Some(left), right)
-            // }
+            3 => {
+                let left = Arc::new(Bvh::new(&mut objects[0..2]));
+                let right = Some(Arc::clone(objects.last().unwrap()));
+                (Some(left), right)
+            }
             _ => {
                 let mid = n / 2;
                 let left = Arc::new(Bvh::new(&mut objects[..mid]));
@@ -279,8 +281,8 @@ impl Bvh {
         b: Arc<dyn Hittable + Send + Sync>,
         axis: usize,
     ) -> Ordering {
-        let center_a = (a.bounding_box().maximum - a.bounding_box().minimum) * 0.5;
-        let center_b = (b.bounding_box().maximum - b.bounding_box().minimum) * 0.5;
+        let center_a = (a.bounding_box().max - a.bounding_box().min) * 0.5;
+        let center_b = (b.bounding_box().max - b.bounding_box().min) * 0.5;
 
         if center_a[axis] < center_b[axis] {
             Ordering::Less

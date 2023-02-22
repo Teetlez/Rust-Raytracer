@@ -247,7 +247,7 @@ fn random_scene() -> Bvh {
     let _steel = Material::metal((0.7, 0.7, 0.7), 0.01, 2.1);
     let _diffuse = Material::lambertian((0.2, 0.7, 0.8));
 
-    // world.push(Arc::new(Sphere::new((0.0, 1.0, 0.0), 1.0, glass)));
+    world.push(Arc::new(Sphere::new((-0.5, 1.0, 0.0), -0.5, glass)));
     world.push(Arc::new(ABox::new(
         (-0.5, 1.0, 0.0),
         (2.0, 2.0, 2.0),
