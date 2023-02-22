@@ -25,9 +25,9 @@ const ASPECT_RATIO: f32 = 3.0 / 2.0;
 const WIDTH: usize = 800;
 const HEIGHT: usize = (WIDTH as f32 / ASPECT_RATIO) as usize;
 
-const SAMPLES: u32 = 32;
+const SAMPLES: u32 = 128;
 
-const MAX_BOUNCE: u32 = 6;
+const MAX_BOUNCE: u32 = 8;
 
 const MAX_PASSES: u32 = 64;
 
@@ -44,28 +44,28 @@ fn main() {
 
     // Make camera
 
-    let camera = &mut Camera::new(
-        Vec3::new(4.0, 2.0, 1.5),
-        Vec3::new(2.0, 1.2, 0.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        60.0,
-        ASPECT_RATIO,
-        0.01,
-        2.0,
-    );
-
     // let camera = &mut Camera::new(
-    //     Vec3::new(0.7, -0.2, -4.5),
-    //     Vec3::new(0.0, 0.0, 0.0),
+    //     Vec3::new(4.0, 2.0, 1.5),
+    //     Vec3::new(2.0, 1.2, 0.0),
     //     Vec3::new(0.0, 1.0, 0.0),
     //     60.0,
     //     ASPECT_RATIO,
-    //     0.2,
-    //     5.0,
+    //     0.01,
+    //     2.0,
     // );
 
+    let camera = &mut Camera::new(
+        Vec3::new(0.7, -0.2, -4.5),
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        60.0,
+        ASPECT_RATIO,
+        0.2,
+        5.0,
+    );
+
     // World setup
-    let world = Arc::new(random_scene());
+    let world = Arc::new(box_scene());
     let mut pass: u32 = 0;
     let mut total_times: Duration = Default::default();
 
@@ -153,43 +153,53 @@ fn box_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
 
     let glass = Material::dielectric((0.6, 0.1, 0.2), 1.51);
-    let steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
-    let light = Material::lambertian((16.0, 16.0, 16.0));
-    let diffuse = Material::lambertian((0.7, 0.7, 0.7));
-    let diffuse_black = Material::lambertian((0.01, 0.01, 0.01));
-    let diffuse_red = Material::lambertian((0.9, 0.1, 0.1));
+    let _steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
+    let light = Material::lambertian((12.0, 12.0, 12.0));
+    let diffuse = Material::lambertian((0.5, 0.5, 0.5));
+    let _diffuse_black = Material::lambertian((0.01, 0.01, 0.01));
+    let _diffuse_red = Material::lambertian((0.9, 0.1, 0.1));
     let diffuse_green = Material::lambertian((0.1, 0.9, 0.1));
-    let diffuse_blue = Material::lambertian((0.1, 0.1, 0.9));
+    let _diffuse_blue = Material::lambertian((0.1, 0.1, 0.9));
 
-    world.push(Arc::new(Sphere::new((1.5, -1.0, 2.5), 1.0, steel)));
+    world.push(Arc::new(Sphere::new((1.5, -1.0, 2.5), 1.0, diffuse_green)));
     world.push(Arc::new(Sphere::new((-1.5, -1.0, 0.5), 1.0, glass)));
     // world.push(Arc::new( Sphere::new((-1.5, -1.0, 0.5), -0.8, glass)));
-    world.push(Arc::new(Sphere::new((0.0, 102.999, 2.0), 100.0, light)));
-
-    world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
-    world.push(Arc::new(Sphere::new(
-        (0.0, -502.0, 0.0),
-        500.0,
-        diffuse_green,
+    world.push(Arc::new(ABox::new(
+        (0.0, 3.0, 2.0),
+        (1.5, 0.01, 1.5),
+        light,
     )));
 
-    world.push(Arc::new(Sphere::new(
-        (503.0, 0.0, 0.0),
-        500.0,
-        diffuse_blue,
-    )));
-    world.push(Arc::new(Sphere::new(
-        (-503.0, 0.0, 0.0),
-        500.0,
-        diffuse_red,
+    world.push(Arc::new(ABox::new(
+        (0.0, 0.5, -0.4),
+        (-6.0, -5.0, -8.4),
+        diffuse,
     )));
 
-    world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
-    world.push(Arc::new(Sphere::new(
-        (0.0, 0.0, -505.0),
-        500.0,
-        diffuse_black,
-    )));
+    // world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
+    // world.push(Arc::new(Sphere::new(
+    //     (0.0, -502.0, 0.0),
+    //     500.0,
+    //     diffuse_green,
+    // )));
+
+    // world.push(Arc::new(Sphere::new(
+    //     (503.0, 0.0, 0.0),
+    //     500.0,
+    //     diffuse_blue,
+    // )));
+    // world.push(Arc::new(Sphere::new(
+    //     (-503.0, 0.0, 0.0),
+    //     500.0,
+    //     diffuse_red,
+    // )));
+
+    // world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
+    // world.push(Arc::new(Sphere::new(
+    //     (0.0, 0.0, -505.0),
+    //     500.0,
+    //     diffuse_black,
+    // )));
     Bvh::new(&mut world)
 }
 
@@ -197,7 +207,11 @@ fn box_scene() -> Bvh {
 fn random_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
     let ground: Material = Material::lambertian((0.5, 0.5, 0.5));
-    world.push(Arc::new(Sphere::new((0.0, -1000.0, 0.0), 1000.0, ground)));
+    world.push(Arc::new(ABox::new(
+        (0.0, -1.0, 0.0),
+        (100.0, 2.0, 100.0),
+        ground,
+    )));
     for a in -3..3 {
         for b in -3..3 {
             let choose_mat = fastrand::f32();
@@ -247,7 +261,11 @@ fn random_scene() -> Bvh {
     let _steel = Material::metal((0.7, 0.7, 0.7), 0.01, 2.1);
     let _diffuse = Material::lambertian((0.2, 0.7, 0.8));
 
-    world.push(Arc::new(Sphere::new((-0.5, 1.0, 0.0), -0.5, glass)));
+    world.push(Arc::new(ABox::new(
+        (-0.5, 1.0, 0.0),
+        (-1.8, -1.8, -1.8),
+        glass,
+    )));
     world.push(Arc::new(ABox::new(
         (-0.5, 1.0, 0.0),
         (2.0, 2.0, 2.0),

@@ -16,10 +16,11 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
     // }
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
+    let mut bounce = 0;
     for _ in 0..depth {
         if let Some(hit) = world.hit(&temp_ray, 0.00015, INFINITY) {
             let scatter: Scatter = hit.material.scatter(temp_ray, hit);
-            if scatter.attenuation.mag_sq() <= 4.0 {
+            if scatter.attenuation.component_max() <= 1.0 + f32::EPSILON {
                 color_total *= scatter.attenuation;
                 temp_ray = scatter.ray;
             } else {
@@ -31,12 +32,17 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
             color_total *= (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0);
             break;
         }
+        bounce += 1;
     }
-    color_total
+    if bounce == depth {
+        Vec3::zero()
+    } else {
+        color_total
+    }
 }
 
 fn color_only(ray: Ray, world: Arc<Bvh>) -> Vec3 {
-    if let Some(hit) = world.hit(&ray, 0.00015, 100.0) {
+    if let Some(hit) = world.hit(&ray, 0.0002, 100.0) {
         ((2.0 + Vec3::unit_y().dot(hit.normal)) / hit.t)
             * hit.material.scatter(ray, hit).attenuation
     } else {

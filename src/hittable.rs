@@ -80,8 +80,10 @@ impl Hittable for Sphere {
 
     fn bounding_box(&self) -> Aabb {
         Aabb {
-            min: self.center.truncated() - Vec3::new(self.center.w, self.center.w, self.center.w),
-            max: self.center.truncated() + Vec3::new(self.center.w, self.center.w, self.center.w),
+            min: self.center.truncated()
+                - Vec3::new(self.center.w, self.center.w, self.center.w).abs(),
+            max: self.center.truncated()
+                + Vec3::new(self.center.w, self.center.w, self.center.w).abs(),
         }
     }
 }
@@ -89,22 +91,27 @@ impl Hittable for Sphere {
 pub struct ABox {
     pub min: Vec3,
     pub max: Vec3,
+    hollow: bool,
     pub material: Material,
 }
 
 impl ABox {
     pub fn new(center: (f32, f32, f32), size: (f32, f32, f32), mat: Material) -> ABox {
+        let hollow = size.0.min(size.1).min(size.2) < 0.0;
+        let minimum = Vec3::new(
+            center.0 - (size.0 * 0.5).abs(),
+            center.1 - (size.1 * 0.5).abs(),
+            center.2 - (size.2 * 0.5).abs(),
+        );
+        let maximum = Vec3::new(
+            center.0 + (size.0 * 0.5).abs(),
+            center.1 + (size.1 * 0.5).abs(),
+            center.2 + (size.2 * 0.5).abs(),
+        );
         ABox {
-            min: Vec3::new(
-                center.0 - (size.0 * 0.5),
-                center.1 - (size.1 * 0.5),
-                center.2 - (size.2 * 0.5),
-            ),
-            max: Vec3::new(
-                center.0 + (size.0 * 0.5),
-                center.1 + (size.1 * 0.5),
-                center.2 + (size.2 * 0.5),
-            ),
+            min: minimum,
+            max: maximum,
+            hollow,
             material: mat,
         }
     }
@@ -152,7 +159,11 @@ impl Hittable for ABox {
                         n[a] = 1.0;
                     }
                 });
-                n
+                if self.hollow {
+                    -n
+                } else {
+                    n
+                }
             };
             Some(HitRecord::new(t, p, normal.normalized(), &self.material))
         } else {
@@ -184,7 +195,7 @@ impl Aabb {
         let mut t_near = t_min;
         let mut t_far = t_max;
         (0..3).all(|a| {
-            if ray.dir[a].abs() <= f32::EPSILON {
+            if ray.dir[a].abs() < f32::EPSILON {
                 ray.pos[a] > self.min[a] && ray.pos[a] < self.max[a]
             } else {
                 let inv_d = ray.dir[a].recip();
@@ -235,8 +246,7 @@ pub struct Bvh {
 
 impl Bvh {
     pub fn new(objects: &mut [Arc<dyn Hittable + Send + Sync>]) -> Bvh {
-        let axis = 0;
-        //fastrand::usize(0..3);
+        let axis = fastrand::usize(0..3);
 
         objects.sort_by(|a, b| Bvh::box_compare(a.clone(), b.clone(), axis));
         let n = objects.len();
@@ -281,15 +291,25 @@ impl Bvh {
         b: Arc<dyn Hittable + Send + Sync>,
         axis: usize,
     ) -> Ordering {
-        let center_a = (a.bounding_box().max - a.bounding_box().min) * 0.5;
-        let center_b = (b.bounding_box().max - b.bounding_box().min) * 0.5;
+        let diff_a = a.bounding_box().max - a.bounding_box().min;
+        let diff_b = b.bounding_box().max - b.bounding_box().min;
+        let center_a = diff_a * 0.5;
+        let center_b = diff_b * 0.5;
 
         if center_a[axis] < center_b[axis] {
             Ordering::Less
         } else if center_a[axis] > center_b[axis] {
             Ordering::Greater
         } else {
-            Ordering::Equal
+            let vol_a = diff_a.x * diff_a.y * diff_a.z;
+            let vol_b = diff_b.x * diff_b.y * diff_b.z;
+            if vol_a < vol_b {
+                Ordering::Less
+            } else if vol_a > vol_b {
+                Ordering::Greater
+            } else {
+                Ordering::Equal
+            }
         }
     }
 }
