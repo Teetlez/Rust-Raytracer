@@ -94,7 +94,7 @@ fn main() {
                 .update_with_buffer(
                     buffer
                         .par_iter()
-                        .map(to_rgb)
+                        .map(render::to_rgb)
                         .collect::<Vec<u32>>()
                         .as_slice(),
                     WIDTH,
@@ -123,7 +123,7 @@ fn main() {
                 .update_with_buffer(
                     buffer
                         .par_iter()
-                        .map(|color| to_rgb(&(*color / pass as f32)))
+                        .map(|color| render::to_rgb(&(*color / pass as f32)))
                         .collect::<Vec<u32>>()
                         .as_slice(),
                     WIDTH,
@@ -141,18 +141,10 @@ fn main() {
     );
 }
 
-#[inline]
-fn to_rgb(color: &Vec3) -> u32 {
-    255 << 24
-        | ((minifb::clamp(0.0, color.x.powf(1.0 / 2.2), 0.999) * 255.4) as u32) << 16
-        | ((minifb::clamp(0.0, color.y.powf(1.0 / 2.2), 0.999) * 255.4) as u32) << 8
-        | ((minifb::clamp(0.0, color.z.powf(1.0 / 2.2), 0.999) * 255.4) as u32)
-}
-
 fn box_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
 
-    let glass = Material::dielectric((0.6, 0.1, 0.2), 1.51);
+    let glass = Material::dielectric((0.6, 0.1, 0.25), 1.52);
     let _steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
     let light = Material::lambertian((12.0, 12.0, 12.0));
     let diffuse = Material::lambertian((0.5, 0.5, 0.5));

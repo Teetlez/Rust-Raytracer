@@ -1,4 +1,5 @@
 use std::f32::INFINITY;
+use std::ops::Mul;
 use std::sync::Arc;
 
 use crate::camera::Camera;
@@ -7,7 +8,38 @@ use crate::material::Scatter;
 use crate::ray::Ray;
 
 use rayon::prelude::*;
-use ultraviolet::Vec3;
+use ultraviolet::{Mat3, Vec3};
+
+// Tonemapping constants
+const GAMMA: f32 = 1.0 / 2.2;
+const M1: Mat3 = Mat3::new(
+    Vec3::new(0.59719, 0.07600, 0.02840),
+    Vec3::new(0.35458, 0.90834, 0.13383),
+    Vec3::new(0.04823, 0.01566, 0.83777),
+);
+const M2: Mat3 = Mat3::new(
+    Vec3::new(1.60475, -0.10208, -0.00327),
+    Vec3::new(-0.53108, 1.10813, -0.07276),
+    Vec3::new(-0.07367, -0.00605, 1.07602),
+);
+
+#[inline]
+pub fn to_rgb(color: &Vec3) -> u32 {
+    let out = aces_tonemap(color);
+    255 << 24
+        | ((out.x * 255.4) as u32) << 16
+        | ((out.y * 255.4) as u32) << 8
+        | ((out.z * 255.4) as u32)
+}
+
+fn aces_tonemap(color: &Vec3) -> Vec3 {
+    let v = M1 * (*color);
+    let a = v * (v + (Vec3::one() * 0.0245786)) - (Vec3::one() * 0.000090537);
+    let b = v * (0.983729 * v + (Vec3::one() * 0.432951)) + (Vec3::one() * 0.238081);
+    (M2 * (a / b))
+        .clamped(Vec3::zero(), Vec3::one())
+        .map(|c| c.powf(GAMMA))
+}
 
 #[inline]
 fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
