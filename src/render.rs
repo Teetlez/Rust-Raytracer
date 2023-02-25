@@ -1,5 +1,5 @@
+use std::f32::consts::PI;
 use std::f32::INFINITY;
-use std::ops::Mul;
 use std::sync::Arc;
 
 use crate::camera::Camera;
@@ -7,6 +7,7 @@ use crate::hittable::{Bvh, Hittable};
 use crate::material::Scatter;
 use crate::ray::Ray;
 
+use radiant::Image;
 use rayon::prelude::*;
 use ultraviolet::{Mat3, Vec3};
 
@@ -32,6 +33,7 @@ pub fn to_rgb(color: &Vec3) -> u32 {
         | ((out.z * 255.4) as u32)
 }
 
+#[inline]
 fn aces_tonemap(color: &Vec3) -> Vec3 {
     let v = M1 * (*color);
     let a = v * (v + (Vec3::one() * 0.0245786)) - (Vec3::one() * 0.000090537);
@@ -42,13 +44,12 @@ fn aces_tonemap(color: &Vec3) -> Vec3 {
 }
 
 #[inline]
-fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
+fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32, image: Arc<Image>) -> Vec3 {
     // if depth == 0 {
     //     return Vec3::new(0.0, 0.0, 0.0);
     // }
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
-    let mut bounce = 0;
     for _ in 0..depth {
         if let Some(hit) = world.hit(&temp_ray, 0.00015, INFINITY) {
             let scatter: Scatter = hit.material.scatter(temp_ray, hit);
@@ -56,20 +57,35 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32) -> Vec3 {
                 color_total *= scatter.attenuation;
                 temp_ray = scatter.ray;
             } else {
-                color_total *= scatter.attenuation;
-                break;
+                return color_total * scatter.attenuation;
             }
         } else {
-            let t = 0.5 * (ray.dir.y + 1.0);
-            color_total *= (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0);
-            break;
+            return if let Some(color) = get_pixel_from_vec(temp_ray.dir, image) {
+                color_total
+                    * Vec3::new(color[0], color[1], color[2])
+                        .clamped(Vec3::zero(), Vec3::one() * 64.0)
+            } else {
+                let t = 0.5 * (ray.dir.y + 1.0);
+                color_total * (1.0 - t) * Vec3::one() + t * Vec3::new(0.5, 0.7, 1.0)
+            };
         }
-        bounce += 1;
     }
-    if bounce == depth {
-        Vec3::zero()
+    color_total * 0.01
+}
+
+#[inline]
+fn get_pixel_from_vec(dir: Vec3, image: Arc<Image>) -> Option<Vec3> {
+    let u = (dir.x.atan2(dir.z) + PI) / (2.0 * PI);
+    let v = (-dir.y).acos() / PI;
+
+    if u <= 1.0 && v <= 1.0 {
+        let color = image.pixel(
+            (u * image.width as f32) as usize,
+            ((1.0 - v) * image.height as f32) as usize,
+        );
+        Some(Vec3::new(color.r, color.g, color.b))
     } else {
-        color_total
+        None
     }
 }
 
@@ -91,11 +107,13 @@ pub fn render(
     buffer: &[Vec3],
     sample_rate: u32,
     max_bounce: u32,
+    image: Arc<Image>,
 ) -> Vec<Vec3> {
     (0..width * height)
         .into_par_iter()
         .chunks((width * height) / 64)
         .flat_map(|chunk| {
+            let hdr = image.clone();
             chunk
                 .iter()
                 .map(|pixel| {
@@ -103,7 +121,8 @@ pub fn render(
                     let x = pixel % width;
                     let mut pixel_color = Vec3::zero();
                     (0..sample_rate).for_each(|_| {
-                        pixel_color += ray_color(camera.gen_ray(x, y), world.clone(), max_bounce);
+                        pixel_color +=
+                            ray_color(camera.gen_ray(x, y), world.clone(), max_bounce, hdr.clone());
                     });
 
                     buffer[*pixel] + (pixel_color / sample_rate as f32)

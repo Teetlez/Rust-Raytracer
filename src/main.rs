@@ -10,7 +10,7 @@ mod render;
 
 extern crate minifb;
 extern crate ultraviolet;
-use std::{sync::Arc, time::Duration};
+use std::{fs::File, io::BufReader, sync::Arc, time::Duration};
 
 use camera::Camera;
 use hittable::{ABox, Bvh, Hittable, Sphere};
@@ -35,6 +35,11 @@ fn main() {
     // Window setup
     let mut buffer: Vec<Vec3> = vec![Vec3::zero(); WIDTH * HEIGHT];
 
+    let f = File::open(r"C:\Git_Projects\Rust-Raytracer\Scene\HDR\satara_night_no_lamps_2k.hdr")
+        .expect("Failed to open specified file");
+    let f = BufReader::new(f);
+    let image = Arc::new(radiant::load(f).expect("Failed to load image data"));
+
     let mut window = Window::new("Rust Pathtracer", WIDTH, HEIGHT, WindowOptions::default())
         .unwrap_or_else(|e| {
             panic!("{}", e);
@@ -44,28 +49,27 @@ fn main() {
 
     // Make camera
 
+    let camera = &mut Camera::new(
+        Vec3::new(13.0, 2.0, 6.0),
+        Vec3::new(1.5, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        20.0,
+        ASPECT_RATIO,
+        0.1,
+        13.0,
+    );
     // let camera = &mut Camera::new(
-    //     Vec3::new(4.0, 2.0, 1.5),
-    //     Vec3::new(2.0, 1.2, 0.0),
+    //     Vec3::new(0.7, -0.2, -4.5),
+    //     Vec3::new(0.0, 0.0, 0.0),
     //     Vec3::new(0.0, 1.0, 0.0),
     //     60.0,
     //     ASPECT_RATIO,
-    //     0.01,
-    //     2.0,
+    //     0.2,
+    //     5.0,
     // );
 
-    let camera = &mut Camera::new(
-        Vec3::new(0.7, -0.2, -4.5),
-        Vec3::new(0.0, 0.0, 0.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        60.0,
-        ASPECT_RATIO,
-        0.2,
-        5.0,
-    );
-
     // World setup
-    let world = Arc::new(box_scene());
+    let world = Arc::new(_random_scene(true, true, true, true, true));
     let mut pass: u32 = 0;
     let mut total_times: Duration = Default::default();
 
@@ -85,7 +89,7 @@ fn main() {
                 window.set_cursor_style(minifb::CursorStyle::Arrow);
             }
             if window.is_key_pressed(Key::Enter, minifb::KeyRepeat::Yes) {
-                println!("Rendering with {MAX_PASSES} passes");
+                println!("Rendering with {MAX_PASSES} passes with {SAMPLES} rays per pixel");
                 buffer = vec![Vec3::zero(); WIDTH * HEIGHT];
                 break;
             }
@@ -115,6 +119,7 @@ fn main() {
                 buffer.as_slice(),
                 SAMPLES,
                 MAX_BOUNCE,
+                image.clone(),
             );
             let elapsed_time = now.elapsed();
             total_times += elapsed_time;
@@ -141,12 +146,12 @@ fn main() {
     );
 }
 
-fn box_scene() -> Bvh {
+fn _box_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
 
     let glass = Material::dielectric((0.6, 0.1, 0.25), 1.52);
     let _steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
-    let light = Material::lambertian((12.0, 12.0, 12.0));
+    let light = Material::lambertian((3.0, 3.0, 3.0));
     let diffuse = Material::lambertian((0.5, 0.5, 0.5));
     let _diffuse_black = Material::lambertian((0.01, 0.01, 0.01));
     let _diffuse_red = Material::lambertian((0.9, 0.1, 0.1));
@@ -154,11 +159,11 @@ fn box_scene() -> Bvh {
     let _diffuse_blue = Material::lambertian((0.1, 0.1, 0.9));
 
     world.push(Arc::new(Sphere::new((1.5, -1.0, 2.5), 1.0, diffuse_green)));
-    world.push(Arc::new(Sphere::new((-1.5, -1.0, 0.5), 1.0, glass)));
+    world.push(Arc::new(Sphere::new((-1.5, -0.7, 0.5), 1.0, glass)));
     // world.push(Arc::new( Sphere::new((-1.5, -1.0, 0.5), -0.8, glass)));
     world.push(Arc::new(ABox::new(
-        (0.0, 3.0, 2.0),
-        (1.5, 0.01, 1.5),
+        (0.0, 3.0, 1.5),
+        (6.0, 0.01, 7.5),
         light,
     )));
 
@@ -195,81 +200,93 @@ fn box_scene() -> Bvh {
     Bvh::new(&mut world)
 }
 
-#[ignore]
-fn random_scene() -> Bvh {
+fn _random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glass: bool) -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
-    let ground: Material = Material::lambertian((0.5, 0.5, 0.5));
+    let ground: Material = Material::lambertian((0.9, 0.9, 0.9));
     world.push(Arc::new(ABox::new(
-        (0.0, -1.0, 0.0),
-        (100.0, 2.0, 100.0),
+        (-2.0, -0.5, -2.0),
+        (50.0, 1.0, 50.0),
         ground,
     )));
-    for a in -3..3 {
-        for b in -3..3 {
-            let choose_mat = fastrand::f32();
-            let center = (
-                a as f32 + 0.9 * fastrand::f32(),
-                0.2 + choose_mat,
-                b as f32 + 0.9 * fastrand::f32(),
-            );
-
-            if (Vec3::new(center.0, center.1, center.2) - Vec3::new(4.0, 0.2, 0.0)).mag() > 0.9 {
-                let albedo = (
-                    fastrand::f32() * fastrand::f32(),
-                    fastrand::f32() * fastrand::f32(),
-                    fastrand::f32() * fastrand::f32(),
+    if lights || diffuse || glossy || metal || glass {
+        for a in -10..8 {
+            for b in -10..8 {
+                let choose_mat = fastrand::f32();
+                let center = (
+                    a as f32 + 0.9 * fastrand::f32(),
+                    0.2,
+                    b as f32 + 0.9 * fastrand::f32(),
                 );
-                if choose_mat < 0.6 {
-                    // diffuse
-                    world.push(Arc::new(Sphere::new(
-                        center,
-                        0.2,
-                        Material::lambertian(albedo),
-                    )));
-                } else if choose_mat < 0.9 {
-                    // metal
-                    let fuzz = 0.5 * fastrand::f32();
-                    world.push(Arc::new(Sphere::new(
-                        center,
-                        0.2,
-                        Material::metal((albedo.0, albedo.1, albedo.2), fuzz, 5.0),
-                    )));
-                } else {
-                    // glass
-                    world.push(Arc::new(Sphere::new(
-                        center,
-                        0.2,
-                        Material::dielectric(
-                            (fastrand::f32(), fastrand::f32(), fastrand::f32()),
-                            1.52,
-                        ),
-                    )));
+
+                if (Vec3::new(center.0, center.1, center.2) - Vec3::new(4.0, 0.2, 0.0)).mag() > 0.9
+                {
+                    let albedo = (
+                        fastrand::f32() * fastrand::f32(),
+                        fastrand::f32() * fastrand::f32(),
+                        fastrand::f32() * fastrand::f32(),
+                    );
+                    if glossy && choose_mat < 0.3 {
+                        // glossy
+                        world.push(Arc::new(Sphere::new(
+                            center,
+                            0.2,
+                            Material::glossy(
+                                albedo,
+                                fastrand::f32() * 0.2,
+                                (fastrand::f32() * 0.5) + 0.5,
+                            ),
+                        )));
+                    } else if diffuse && choose_mat < 0.6 {
+                        // diffuse
+                        world.push(Arc::new(Sphere::new(
+                            center,
+                            0.2,
+                            Material::lambertian(albedo),
+                        )));
+                    } else if metal && choose_mat < 0.8 {
+                        // metal
+                        let fuzz = 0.5 * fastrand::f32();
+                        world.push(Arc::new(Sphere::new(
+                            center,
+                            0.2,
+                            Material::metal((albedo.0, albedo.1, albedo.2), fuzz, 5.0),
+                        )));
+                    } else if lights && choose_mat < 0.9 {
+                        // lights
+                        world.push(Arc::new(Sphere::new(
+                            center,
+                            0.2,
+                            Material::lambertian((
+                                fastrand::f32() * 6.0,
+                                fastrand::f32() * 6.0,
+                                fastrand::f32() * 6.0,
+                            )),
+                        )));
+                    } else if glass {
+                        // glass
+                        world.push(Arc::new(Sphere::new(
+                            center,
+                            0.2,
+                            Material::dielectric(
+                                (fastrand::f32(), fastrand::f32(), fastrand::f32()),
+                                1.52,
+                            ),
+                        )));
+                    }
                 }
             }
         }
     }
 
-    let glass = Material::dielectric((0.6, 0.1, 0.25), 1.52);
-    let _steel = Material::metal((0.7, 0.7, 0.7), 0.01, 2.1);
-    let _diffuse = Material::lambertian((0.2, 0.7, 0.8));
+    let glass = Material::dielectric((0.3, 0.3, 0.3), 1.52);
+    let gloss = Material::glossy((0.7, 0.7, 0.7), 0.05, 0.52);
+    let steel = Material::metal((0.7, 0.7, 0.7), 0.05, 1.1);
+    let diffuse = Material::lambertian((0.7, 0.7, 0.7));
 
-    world.push(Arc::new(ABox::new(
-        (-0.5, 1.0, 0.0),
-        (-1.8, -1.8, -1.8),
-        glass,
-    )));
-    world.push(Arc::new(ABox::new(
-        (-0.5, 1.0, 0.0),
-        (2.0, 2.0, 2.0),
-        glass,
-    )));
-    world.push(Arc::new(ABox::new((2.0, 1.2, 0.0), (2.0, 2.0, 0.2), glass)));
-    // world.push(Arc::new(Sphere::new(
-    //     (-4.0, 1.0, 0.0),
-    //     1.0,
-    //     diffuse,
-    // )));
-    // world.push(Arc::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));
+    world.push(Arc::new(Sphere::new((4.5, 1.0, 0.0), 1.0, steel)));
+    world.push(Arc::new(Sphere::new((1.5, 1.0, 0.0), 1.0, gloss)));
+    world.push(Arc::new(Sphere::new((-1.5, 1.0, 0.0), 1.0, glass)));
+    world.push(Arc::new(Sphere::new((-4.5, 1.0, 0.0), 1.0, diffuse)));
 
     Bvh::new(&mut world)
 }

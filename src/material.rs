@@ -1,4 +1,8 @@
-use crate::{hittable::HitRecord, random::random_in_unit_sphere, ray::Ray};
+use crate::{
+    hittable::HitRecord,
+    random::{random_in_cosine_sphere, random_in_unit_sphere},
+    ray::Ray,
+};
 
 use ultraviolet::Vec3;
 
@@ -21,10 +25,42 @@ pub struct Lambertian {
 
 impl Lambertian {
     pub fn scatter(self, _: Ray, hit: HitRecord) -> Scatter {
-        let target = hit.point + hit.normal + random_in_unit_sphere();
+        let mut direction = Onb::from_w(&hit.normal).local(random_in_cosine_sphere());
+        if hit.normal.dot(direction) <= f32::EPSILON {
+            direction *= -1.0;
+        }
         let attenuation = self.albedo;
-        let scattered_ray = Ray::new(hit.point, target - hit.point);
+        let scattered_ray = Ray::new(hit.point, direction);
         Scatter::new(attenuation, scattered_ray)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Glossy {
+    pub albedo: Vec3,
+    pub roughness: f32,
+    pub reflectance: f32,
+}
+
+impl Glossy {
+    pub fn scatter(self, ray: Ray, hit: HitRecord) -> Scatter {
+        let reflection_prob = schlick(
+            ((-ray.dir).dot(hit.normal)).min(1.0),
+            1.00028 / (1.0 + self.reflectance),
+        );
+        let (color, out_dir) = if fastrand::f32() < reflection_prob {
+            (
+                Vec3::one() * 0.99,
+                ray.dir.reflected(hit.normal) + (self.roughness * random_in_unit_sphere()),
+            )
+        } else {
+            let mut direction = Onb::from_w(&hit.normal).local(random_in_cosine_sphere());
+            if hit.normal.dot(direction) <= f32::EPSILON {
+                direction *= -1.0;
+            }
+            (self.albedo, direction)
+        };
+        Scatter::new(color, Ray::new(hit.point, out_dir))
     }
 }
 
@@ -42,7 +78,7 @@ impl Metal {
                 * (1.9
                     - schlick(
                         self.reflectance * ray.dir.dot(hit.normal) / ray.dir.mag(),
-                        self.reflectance,
+                        self.reflectance + 1.0,
                     ))
                 * random_in_unit_sphere());
         Scatter::new(self.albedo, Ray::new(hit.point, out_dir))
@@ -80,7 +116,7 @@ impl Dielectric {
                 hit.normal,
                 1.00028 / self.refractive_index,
                 ((-ray.dir).dot(hit.normal)).min(1.0),
-                Vec3::one() * 0.9,
+                Vec3::one() * 0.99,
             )
         };
         if ni_over_nt * (1.0 - (cosine * cosine)).sqrt() <= 1.0 {
@@ -105,12 +141,21 @@ pub enum Material {
     Dielectric(Dielectric),
     Lambertian(Lambertian),
     Metal(Metal),
+    Glossy(Glossy),
 }
 
 impl Material {
     pub fn lambertian(albedo: (f32, f32, f32)) -> Material {
         Material::Lambertian(Lambertian {
             albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
+        })
+    }
+
+    pub fn glossy(albedo: (f32, f32, f32), roughness: f32, reflectance: f32) -> Material {
+        Material::Glossy(Glossy {
+            albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
+            roughness,
+            reflectance,
         })
     }
 
@@ -134,6 +179,37 @@ impl Material {
             Material::Dielectric(d) => d.scatter(ray, hit),
             Material::Lambertian(l) => l.scatter(ray, hit),
             Material::Metal(m) => m.scatter(ray, hit),
+            Material::Glossy(g) => g.scatter(ray, hit),
         }
+    }
+}
+
+struct Onb {
+    pub u: Vec3,
+    pub v: Vec3,
+    pub w: Vec3,
+}
+
+impl Onb {
+    pub fn new(u: Vec3, v: Vec3, w: Vec3) -> Onb {
+        Onb { u, v, w }
+    }
+
+    #[inline]
+    pub fn from_w(n: &Vec3) -> Onb {
+        let w = n.normalized();
+        let a = if w.x.abs() > 0.9 {
+            Vec3::unit_y()
+        } else {
+            Vec3::unit_x()
+        };
+        let v = w.cross(a).normalized();
+        let u = w.cross(v);
+        Onb { u, v, w }
+    }
+
+    #[inline]
+    pub fn local(&self, a: Vec3) -> Vec3 {
+        a.x * self.u + a.y * self.v + a.z * self.w
     }
 }
