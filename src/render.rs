@@ -6,13 +6,11 @@ use crate::camera::Camera;
 use crate::hittable::{Bvh, Hittable};
 use crate::material::Scatter;
 use crate::ray::Ray;
-
 use radiant::Image;
 use rayon::prelude::*;
 use ultraviolet::{Mat3, Vec3};
 
 // Tonemapping constants
-const GAMMA: f32 = 1.0 / 2.2;
 const M1: Mat3 = Mat3::new(
     Vec3::new(0.59719, 0.07600, 0.02840),
     Vec3::new(0.35458, 0.90834, 0.13383),
@@ -25,8 +23,8 @@ const M2: Mat3 = Mat3::new(
 );
 
 #[inline]
-pub fn to_rgb(color: &Vec3) -> u32 {
-    let out = aces_tonemap(color);
+pub fn to_rgb(color: &Vec3, gamma: f32) -> u32 {
+    let out = aces_tonemap(color, gamma);
     255 << 24
         | ((out.x * 255.4) as u32) << 16
         | ((out.y * 255.4) as u32) << 8
@@ -34,13 +32,13 @@ pub fn to_rgb(color: &Vec3) -> u32 {
 }
 
 #[inline]
-fn aces_tonemap(color: &Vec3) -> Vec3 {
+fn aces_tonemap(color: &Vec3, gamma: f32) -> Vec3 {
     let v = M1 * (*color);
     let a = v * (v + (Vec3::one() * 0.0245786)) - (Vec3::one() * 0.000090537);
     let b = v * (0.983729 * v + (Vec3::one() * 0.432951)) + (Vec3::one() * 0.238081);
     (M2 * (a / b))
         .clamped(Vec3::zero(), Vec3::one())
-        .map(|c| c.powf(GAMMA))
+        .map(|c| c.powf(gamma))
 }
 
 #[inline]
@@ -61,12 +59,11 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32, image: Arc<Image>) -> Vec3 {
             }
         } else {
             return if let Some(color) = get_pixel_from_vec(temp_ray.dir, image) {
-                color_total
-                    * Vec3::new(color[0], color[1], color[2])
-                        .clamped(Vec3::zero(), Vec3::one() * 64.0)
+                color_total * Vec3::new(color[0], color[1], color[2])
+                //.clamped(Vec3::zero(), Vec3::one() * 64.0)
             } else {
-                let t = 0.5 * (ray.dir.y + 1.0);
-                color_total * (1.0 - t) * Vec3::one() + t * Vec3::new(0.5, 0.7, 1.0)
+                let t = 0.5 * (temp_ray.dir.y + 1.0);
+                color_total * ((1.0 - t) * Vec3::one() + t * Vec3::new(0.5, 0.7, 1.0)) * 1.5
             };
         }
     }
@@ -99,54 +96,65 @@ fn color_only(ray: Ray, world: Arc<Bvh>) -> Vec3 {
     }
 }
 
-pub fn render(
-    width: usize,
-    height: usize,
-    camera: Camera,
-    world: Arc<Bvh>,
-    buffer: &[Vec3],
-    sample_rate: u32,
-    max_bounce: u32,
-    image: Arc<Image>,
-) -> Vec<Vec3> {
-    (0..width * height)
-        .into_par_iter()
-        .chunks((width * height) / 64)
-        .flat_map(|chunk| {
-            let hdr = image.clone();
-            chunk
-                .iter()
-                .map(|pixel| {
-                    let y = height - 1 - pixel / width;
-                    let x = pixel % width;
-                    let mut pixel_color = Vec3::zero();
-                    (0..sample_rate).for_each(|_| {
-                        pixel_color +=
-                            ray_color(camera.gen_ray(x, y), world.clone(), max_bounce, hdr.clone());
-                    });
-
-                    buffer[*pixel] + (pixel_color / sample_rate as f32)
-                })
-                .collect::<Vec<Vec3>>()
-        })
-        .collect()
+pub struct Renderer {
+    pub width: usize,
+    pub height: usize,
+    pub camera: Camera,
+    pub world: Arc<Bvh>,
+    pub sample_rate: u32,
+    pub max_bounce: u32,
+    pub hdr: Arc<Image>,
 }
+impl Renderer {
+    pub fn render(&self, buffer: &[Vec3]) -> Vec<Vec3> {
+        (0..self.width * self.height)
+            .into_par_iter()
+            .chunks((self.width * self.height) / 64)
+            .flat_map(|chunk| {
+                let hdr = self.hdr.clone();
+                chunk
+                    .iter()
+                    .map(|pixel| {
+                        let y = self.height - 1 - pixel / self.width;
+                        let x = pixel % self.width;
+                        let mut pixel_color = Vec3::zero();
+                        (0..self.sample_rate).for_each(|_| {
+                            pixel_color += ray_color(
+                                self.camera.gen_ray(self.width, self.height, x, y),
+                                self.world.clone(),
+                                self.max_bounce,
+                                hdr.clone(),
+                            );
+                        });
 
-#[inline]
-pub fn preview(width: usize, height: usize, camera: Camera, world: Arc<Bvh>) -> Vec<Vec3> {
-    (0..width * height)
-        .into_par_iter()
-        .chunks((width * height) / 64)
-        .flat_map(|chunk| {
-            chunk
-                .iter()
-                .map(|pixel| {
-                    color_only(
-                        camera.gen_ray(pixel % width, height - 1 - pixel / width),
-                        world.clone(),
-                    )
-                })
-                .collect::<Vec<Vec3>>()
-        })
-        .collect()
+                        buffer[*pixel] + (pixel_color / self.sample_rate as f32)
+                    })
+                    .collect::<Vec<Vec3>>()
+            })
+            .collect()
+    }
+
+    #[inline]
+    pub fn preview(&self) -> Vec<Vec3> {
+        (0..self.width * self.height)
+            .into_par_iter()
+            .chunks((self.width * self.height) / 64)
+            .flat_map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|pixel| {
+                        color_only(
+                            self.camera.gen_ray(
+                                self.width,
+                                self.height,
+                                pixel % self.width,
+                                self.height - 1 - pixel / self.width,
+                            ),
+                            self.world.clone(),
+                        )
+                    })
+                    .collect::<Vec<Vec3>>()
+            })
+            .collect()
+    }
 }

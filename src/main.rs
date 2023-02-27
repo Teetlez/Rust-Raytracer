@@ -8,11 +8,13 @@ mod random;
 mod ray;
 mod render;
 
+extern crate clap;
 extern crate minifb;
 extern crate ultraviolet;
 use std::{fs::File, io::BufReader, sync::Arc, time::Duration};
 
 use camera::Camera;
+use clap::Parser;
 use hittable::{ABox, Bvh, Hittable, Sphere};
 use material::Material;
 use minifb::{Key, Window, WindowOptions};
@@ -20,58 +22,100 @@ use ultraviolet::Vec3;
 
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
-const ASPECT_RATIO: f32 = 3.0 / 2.0;
+use crate::render::Renderer;
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct Args {
+    // Number of samples per pixel
+    #[arg(short, long, default_value_t = 128)]
+    samples: u32,
 
-const WIDTH: usize = 800;
-const HEIGHT: usize = (WIDTH as f32 / ASPECT_RATIO) as usize;
+    // Number of frames to cumulate
+    #[arg(short, long, default_value_t = 64)]
+    passes: u32,
 
-const SAMPLES: u32 = 128;
+    // Max number of times a ray can bounce
+    #[arg(short, long, default_value_t = 8)]
+    bounces: u32,
 
-const MAX_BOUNCE: u32 = 8;
+    // Pixel width of frame
+    #[arg(short, long, default_value_t = 640)]
+    width: usize,
 
-const MAX_PASSES: u32 = 64;
+    // Pixel hight of frame
+    #[arg(short, long, default_value_t = 480)]
+    height: usize,
+
+    // Pixel hight of frame
+    #[arg(short, long, default_value_t = 2.2)]
+    gamma: f32,
+
+    // Max light brightness
+    #[arg(short, long, default_value_t = -1.0)]
+    clamp_light: f32,
+}
 
 fn main() {
-    // Window setup
-    let mut buffer: Vec<Vec3> = vec![Vec3::zero(); WIDTH * HEIGHT];
+    let args = Args::parse();
 
-    let f = File::open(r"C:\Git_Projects\Rust-Raytracer\Scene\HDR\satara_night_no_lamps_2k.hdr")
+    // Window setup
+    let mut buffer: Vec<Vec3> = vec![Vec3::zero(); args.width * args.height];
+
+    let f = File::open(r"C:\Git_Projects\Rust-Raytracer\Scene\HDR\studio_small_08_2k.hdr")
         .expect("Failed to open specified file");
     let f = BufReader::new(f);
     let image = Arc::new(radiant::load(f).expect("Failed to load image data"));
 
-    let mut window = Window::new("Rust Pathtracer", WIDTH, HEIGHT, WindowOptions::default())
-        .unwrap_or_else(|e| {
-            panic!("{}", e);
-        });
+    let mut window = Window::new(
+        "Rust Pathtracer",
+        args.width,
+        args.height,
+        WindowOptions::default(),
+    )
+    .unwrap_or_else(|e| {
+        panic!("{}", e);
+    });
 
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
     // Make camera
 
-    let camera = &mut Camera::new(
-        Vec3::new(13.0, 2.0, 6.0),
-        Vec3::new(1.5, 0.0, 0.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        20.0,
-        ASPECT_RATIO,
-        0.1,
-        13.0,
-    );
     // let camera = &mut Camera::new(
-    //     Vec3::new(0.7, -0.2, -4.5),
+    //     Vec3::new(13.0, 2.0, 3.0),
     //     Vec3::new(0.0, 0.0, 0.0),
     //     Vec3::new(0.0, 1.0, 0.0),
-    //     60.0,
-    //     ASPECT_RATIO,
-    //     0.2,
-    //     5.0,
+    //     20.0,
+    //     args.width as f32 / args.height as f32,
+    //     0.15,
+    //     11.0,
     // );
+    let camera = &mut Camera::new(
+        Vec3::new(0.7, -0.2, -4.5),
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        60.0,
+        args.width as f32 / args.height as f32,
+        0.2,
+        5.0,
+    );
 
     // World setup
-    let world = Arc::new(_random_scene(true, true, true, true, true));
+    // let world = Arc::new(_random_scene(false, true, true, true, true));
+    let world = Arc::new(_box_scene());
     let mut pass: u32 = 0;
     let mut total_times: Duration = Default::default();
+
+    let renderer = Renderer {
+        width: args.width,
+        height: args.height,
+        camera: *camera,
+        world,
+        sample_rate: args.samples,
+        max_bounce: args.bounces,
+        hdr: image,
+    };
+
+    let gamma = args.gamma.recip();
 
     println!("press Enter to start render");
     // Render loop
@@ -89,38 +133,32 @@ fn main() {
                 window.set_cursor_style(minifb::CursorStyle::Arrow);
             }
             if window.is_key_pressed(Key::Enter, minifb::KeyRepeat::Yes) {
-                println!("Rendering with {MAX_PASSES} passes with {SAMPLES} rays per pixel");
-                buffer = vec![Vec3::zero(); WIDTH * HEIGHT];
+                println!(
+                    "Rendering with {0} passes with {1} rays per pixel",
+                    args.passes, renderer.sample_rate
+                );
+                buffer = vec![Vec3::zero(); renderer.height * renderer.width];
                 break;
             }
-            buffer = render::preview(WIDTH, HEIGHT, *camera, world.clone());
+            buffer = renderer.preview();
             window
                 .update_with_buffer(
                     buffer
                         .par_iter()
-                        .map(render::to_rgb)
+                        .map(|color| render::to_rgb(color, gamma))
                         .collect::<Vec<u32>>()
                         .as_slice(),
-                    WIDTH,
-                    HEIGHT,
+                    renderer.width,
+                    renderer.height,
                 )
                 .unwrap();
             pass = 0;
         }
-        if pass <= MAX_PASSES && window.is_open() {
+        if pass <= args.passes && window.is_open() {
             pass += 1;
             println!("rendering...");
             let now = std::time::Instant::now();
-            buffer = render::render(
-                WIDTH,
-                HEIGHT,
-                *camera,
-                world.clone(),
-                buffer.as_slice(),
-                SAMPLES,
-                MAX_BOUNCE,
-                image.clone(),
-            );
+            buffer = renderer.render(buffer.as_slice());
             let elapsed_time = now.elapsed();
             total_times += elapsed_time;
             println!("Frame took {} seconds.", elapsed_time.as_secs_f32());
@@ -128,11 +166,11 @@ fn main() {
                 .update_with_buffer(
                     buffer
                         .par_iter()
-                        .map(|color| render::to_rgb(&(*color / pass as f32)))
+                        .map(|color| render::to_rgb(&(*color / pass as f32), gamma))
                         .collect::<Vec<u32>>()
                         .as_slice(),
-                    WIDTH,
-                    HEIGHT,
+                    args.width,
+                    args.height,
                 )
                 .unwrap();
             println!("finished pass {pass}");
@@ -150,67 +188,67 @@ fn _box_scene() -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
 
     let glass = Material::dielectric((0.6, 0.1, 0.25), 1.52);
-    let _steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
-    let light = Material::lambertian((3.0, 3.0, 3.0));
+    let steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
+    let light = Material::lambertian((6.0, 6.0, 6.0));
     let diffuse = Material::lambertian((0.5, 0.5, 0.5));
-    let _diffuse_black = Material::lambertian((0.01, 0.01, 0.01));
-    let _diffuse_red = Material::lambertian((0.9, 0.1, 0.1));
+    let diffuse_black = Material::lambertian((0.01, 0.01, 0.01));
+    let diffuse_red = Material::lambertian((0.9, 0.1, 0.1));
     let diffuse_green = Material::lambertian((0.1, 0.9, 0.1));
-    let _diffuse_blue = Material::lambertian((0.1, 0.1, 0.9));
+    let diffuse_blue = Material::lambertian((0.1, 0.1, 0.9));
 
-    world.push(Arc::new(Sphere::new((1.5, -1.0, 2.5), 1.0, diffuse_green)));
+    world.push(Arc::new(Sphere::new((1.5, -1.0, 2.5), 1.0, steel)));
     world.push(Arc::new(Sphere::new((-1.5, -0.7, 0.5), 1.0, glass)));
     // world.push(Arc::new( Sphere::new((-1.5, -1.0, 0.5), -0.8, glass)));
     world.push(Arc::new(ABox::new(
         (0.0, 3.0, 1.5),
-        (6.0, 0.01, 7.5),
+        (3.0, 0.01, 3.5),
         light,
     )));
 
-    world.push(Arc::new(ABox::new(
-        (0.0, 0.5, -0.4),
-        (-6.0, -5.0, -8.4),
-        diffuse,
+    // world.push(Arc::new(ABox::new(
+    //     (0.0, 0.5, -0.4),
+    //     (-6.0, -5.0, -8.4),
+    //     diffuse,
+    // )));
+
+    world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
+    world.push(Arc::new(Sphere::new(
+        (0.0, -502.0, 0.0),
+        500.0,
+        diffuse_green,
     )));
 
-    // world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
-    // world.push(Arc::new(Sphere::new(
-    //     (0.0, -502.0, 0.0),
-    //     500.0,
-    //     diffuse_green,
-    // )));
+    world.push(Arc::new(Sphere::new(
+        (503.0, 0.0, 0.0),
+        500.0,
+        diffuse_blue,
+    )));
+    world.push(Arc::new(Sphere::new(
+        (-503.0, 0.0, 0.0),
+        500.0,
+        diffuse_red,
+    )));
 
-    // world.push(Arc::new(Sphere::new(
-    //     (503.0, 0.0, 0.0),
-    //     500.0,
-    //     diffuse_blue,
-    // )));
-    // world.push(Arc::new(Sphere::new(
-    //     (-503.0, 0.0, 0.0),
-    //     500.0,
-    //     diffuse_red,
-    // )));
-
-    // world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
-    // world.push(Arc::new(Sphere::new(
-    //     (0.0, 0.0, -505.0),
-    //     500.0,
-    //     diffuse_black,
-    // )));
+    world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
+    world.push(Arc::new(Sphere::new(
+        (0.0, 0.0, -505.0),
+        500.0,
+        diffuse_black,
+    )));
     Bvh::new(&mut world)
 }
 
 fn _random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glass: bool) -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
-    let ground: Material = Material::lambertian((0.9, 0.9, 0.9));
+    let ground: Material = Material::lambertian((0.5, 0.5, 0.5));
     world.push(Arc::new(ABox::new(
         (-2.0, -0.5, -2.0),
         (50.0, 1.0, 50.0),
         ground,
     )));
     if lights || diffuse || glossy || metal || glass {
-        for a in -10..8 {
-            for b in -10..8 {
+        for a in -11..11 {
+            for b in -10..7 {
                 let choose_mat = fastrand::f32();
                 let center = (
                     a as f32 + 0.9 * fastrand::f32(),
@@ -232,8 +270,8 @@ fn _random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glass: 
                             0.2,
                             Material::glossy(
                                 albedo,
-                                fastrand::f32() * 0.2,
-                                (fastrand::f32() * 0.5) + 0.5,
+                                fastrand::f32() * 0.5,
+                                (fastrand::f32() * 0.5) + 1.0,
                             ),
                         )));
                     } else if diffuse && choose_mat < 0.6 {
@@ -278,15 +316,15 @@ fn _random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glass: 
         }
     }
 
-    let glass = Material::dielectric((0.3, 0.3, 0.3), 1.52);
-    let gloss = Material::glossy((0.7, 0.7, 0.7), 0.05, 0.52);
-    let steel = Material::metal((0.7, 0.7, 0.7), 0.05, 1.1);
-    let diffuse = Material::lambertian((0.7, 0.7, 0.7));
+    let glass = Material::dielectric((0.1, 0.1, 0.1), 1.52);
+    let gloss = Material::glossy((0.2, 0.1, 0.05), 0.2, 0.28);
+    let steel = Material::metal((0.7, 0.6, 0.5), 0.01, 1.1);
+    // let diffuse = Material::lambertian((0.4, 0.2, 0.1));
 
-    world.push(Arc::new(Sphere::new((4.5, 1.0, 0.0), 1.0, steel)));
-    world.push(Arc::new(Sphere::new((1.5, 1.0, 0.0), 1.0, gloss)));
-    world.push(Arc::new(Sphere::new((-1.5, 1.0, 0.0), 1.0, glass)));
-    world.push(Arc::new(Sphere::new((-4.5, 1.0, 0.0), 1.0, diffuse)));
+    world.push(Arc::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));
+    world.push(Arc::new(Sphere::new((0.0, 1.0, 0.0), 1.0, glass)));
+    world.push(Arc::new(Sphere::new((-4.0, 1.0, 0.0), 1.0, gloss)));
+    // world.push(Arc::new(Sphere::new((-4.5, 1.0, 0.0), 1.0, diffuse)));
 
     Bvh::new(&mut world)
 }

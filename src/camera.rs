@@ -1,5 +1,5 @@
 extern crate fastrand;
-use crate::{random, ray::Ray, HEIGHT, WIDTH};
+use crate::{random, ray::Ray};
 
 use ultraviolet::Vec3;
 
@@ -11,9 +11,7 @@ pub struct Camera {
     lower_left_corner: Vec3,
     horizontal: Vec3,
     vertical: Vec3,
-    u: Vec3,
-    v: Vec3,
-    w: Vec3,
+    uvw: [Vec3; 3],
     lens_radius: f32,
     focus_dist: f32,
 }
@@ -47,21 +45,19 @@ impl Camera {
             lower_left_corner,
             horizontal,
             vertical,
-            u,
-            v,
-            w,
+            uvw: [u, v, w],
             lens_radius: apeture / 2.0,
             focus_dist,
         }
     }
 
     #[inline]
-    pub fn gen_ray(&self, x: usize, y: usize) -> Ray {
+    pub fn gen_ray(&self, width: usize, height: usize, x: usize, y: usize) -> Ray {
         let rd: Vec3 = self.lens_radius * random::random_in_unit_disk();
-        let offset: Vec3 = rd.x * self.u + rd.y * self.v;
+        let offset: Vec3 = rd.x * self.uvw[0] + rd.y * self.uvw[1];
 
-        let s = (x as f32 + fastrand::f32()) / (WIDTH - 1) as f32;
-        let t = (y as f32 + fastrand::f32()) / (HEIGHT - 1) as f32;
+        let s = (x as f32 + fastrand::f32()) / (width - 1) as f32;
+        let t = (y as f32 + fastrand::f32()) / (height - 1) as f32;
         Ray::new(
             self.eye + offset,
             (self.lower_left_corner + (s * self.horizontal) + (t * self.vertical))
@@ -97,15 +93,17 @@ impl Camera {
             _ => (),
         });
 
-        self.horizontal = self.focus_dist * viewport_width * self.u;
-        self.vertical = self.focus_dist * viewport_height * self.v;
-        self.lower_left_corner =
-            self.eye - (self.horizontal / 2.0) - (self.vertical / 2.0) - self.focus_dist * self.w;
+        self.horizontal = self.focus_dist * viewport_width * self.uvw[0];
+        self.vertical = self.focus_dist * viewport_height * self.uvw[1];
+        self.lower_left_corner = self.eye
+            - (self.horizontal / 2.0)
+            - (self.vertical / 2.0)
+            - self.focus_dist * self.uvw[2];
     }
 
     fn forward(&mut self) {
-        self.eye -= self.w * 0.5;
-        self.lookat -= self.w * 0.5;
+        self.eye -= self.uvw[2] * 0.5;
+        self.lookat -= self.uvw[2] * 0.5;
     }
 
     fn left(&mut self) {
@@ -113,8 +111,8 @@ impl Camera {
     }
 
     fn back(&mut self) {
-        self.eye += self.w * 0.5;
-        self.lookat += self.w * 0.5;
+        self.eye += self.uvw[2] * 0.5;
+        self.lookat += self.uvw[2] * 0.5;
     }
 
     fn right(&mut self) {
