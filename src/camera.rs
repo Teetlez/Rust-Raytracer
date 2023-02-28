@@ -52,12 +52,12 @@ impl Camera {
     }
 
     #[inline]
-    pub fn gen_ray(&self, width: usize, height: usize, x: usize, y: usize) -> Ray {
+    pub fn gen_ray(&self, width: usize, height: usize, x: f32, y: f32) -> Ray {
         let rd: Vec3 = self.lens_radius * random::random_in_unit_disk();
         let offset: Vec3 = rd.x * self.uvw[0] + rd.y * self.uvw[1];
 
-        let s = (x as f32 + fastrand::f32()) / (width - 1) as f32;
-        let t = (y as f32 + fastrand::f32()) / (height - 1) as f32;
+        let s = x / (width - 1) as f32;
+        let t = y / (height - 1) as f32;
         Ray::new(
             self.eye + offset,
             (self.lower_left_corner + (s * self.horizontal) + (t * self.vertical))

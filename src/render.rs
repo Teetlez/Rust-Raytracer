@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::f32::consts::PI;
 use std::f32::INFINITY;
 use std::sync::Arc;
@@ -6,6 +7,7 @@ use crate::camera::Camera;
 use crate::hittable::{Bvh, Hittable};
 use crate::material::Scatter;
 use crate::ray::Ray;
+use quasirandom::Qrng;
 use radiant::Image;
 use rayon::prelude::*;
 use ultraviolet::{Mat3, Vec3};
@@ -42,15 +44,18 @@ fn aces_tonemap(color: &Vec3, gamma: f32) -> Vec3 {
 }
 
 #[inline]
-fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32, image: Arc<Image>) -> Vec3 {
-    // if depth == 0 {
-    //     return Vec3::new(0.0, 0.0, 0.0);
-    // }
+fn ray_color(
+    ray: Ray,
+    world: Arc<Bvh>,
+    depth: u32,
+    image: Arc<Image>,
+    scatter_rng: &[(f32, f32)],
+) -> Vec3 {
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
     for _ in 0..depth {
         if let Some(hit) = world.hit(&temp_ray, 0.00015, INFINITY) {
-            let scatter: Scatter = hit.material.scatter(temp_ray, hit);
+            let scatter: Scatter = hit.material.scatter(temp_ray, hit, scatter_rng);
             if scatter.attenuation.component_max() <= 1.0 + f32::EPSILON {
                 color_total *= scatter.attenuation;
                 temp_ray = scatter.ray;
@@ -59,8 +64,9 @@ fn ray_color(ray: Ray, world: Arc<Bvh>, depth: u32, image: Arc<Image>) -> Vec3 {
             }
         } else {
             return if let Some(color) = get_pixel_from_vec(temp_ray.dir, image) {
-                color_total * Vec3::new(color[0], color[1], color[2])
-                //.clamped(Vec3::zero(), Vec3::one() * 64.0)
+                color_total
+                    * Vec3::new(color[0], color[1], color[2])
+                        .clamped(Vec3::zero(), Vec3::one() * 64.0)
             } else {
                 let t = 0.5 * (temp_ray.dir.y + 1.0);
                 color_total * ((1.0 - t) * Vec3::one() + t * Vec3::new(0.5, 0.7, 1.0)) * 1.5
@@ -86,10 +92,10 @@ fn get_pixel_from_vec(dir: Vec3, image: Arc<Image>) -> Option<Vec3> {
     }
 }
 
-fn color_only(ray: Ray, world: Arc<Bvh>) -> Vec3 {
+fn color_only(ray: Ray, world: Arc<Bvh>, scatter_rng: &[(f32, f32)]) -> Vec3 {
     if let Some(hit) = world.hit(&ray, 0.0002, 100.0) {
         ((2.0 + Vec3::unit_y().dot(hit.normal)) / hit.t)
-            * hit.material.scatter(ray, hit).attenuation
+            * hit.material.scatter(ray, hit, scatter_rng).attenuation
     } else {
         let t = 0.5 * (ray.dir.y + 1.0);
         (1.0 - t) * Vec3::new(1.0, 1.0, 1.0) + t * Vec3::new(0.5, 0.7, 1.0)
@@ -112,18 +118,24 @@ impl Renderer {
             .chunks((self.width * self.height) / 64)
             .flat_map(|chunk| {
                 let hdr = self.hdr.clone();
+                let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
+                let sample_vec = (0..max(chunk.len(), self.sample_rate as usize))
+                    .map(|_| qrng.gen())
+                    .collect::<Vec<(f32, f32)>>();
                 chunk
                     .iter()
                     .map(|pixel| {
-                        let y = self.height - 1 - pixel / self.width;
-                        let x = pixel % self.width;
+                        let x = (pixel % self.width) as f32;
+                        let y = (self.height - 1 - pixel / self.width) as f32;
                         let mut pixel_color = Vec3::zero();
-                        (0..self.sample_rate).for_each(|_| {
+                        (0..self.sample_rate).for_each(|i| {
+                            let (jx, jy) = sample_vec[i as usize];
                             pixel_color += ray_color(
-                                self.camera.gen_ray(self.width, self.height, x, y),
+                                self.camera.gen_ray(self.width, self.height, x + jx, y + jy),
                                 self.world.clone(),
                                 self.max_bounce,
                                 hdr.clone(),
+                                sample_vec.as_slice(),
                             );
                         });
 
@@ -140,17 +152,23 @@ impl Renderer {
             .into_par_iter()
             .chunks((self.width * self.height) / 64)
             .flat_map(|chunk| {
+                let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
+                let sample_vec = (0..chunk.len())
+                    .map(|_| qrng.gen())
+                    .collect::<Vec<(f32, f32)>>();
                 chunk
                     .iter()
                     .map(|pixel| {
+                        let (jx, jy) = qrng.gen();
                         color_only(
                             self.camera.gen_ray(
                                 self.width,
                                 self.height,
-                                pixel % self.width,
-                                self.height - 1 - pixel / self.width,
+                                (pixel % self.width) as f32 + jx,
+                                (self.height - 1 - pixel / self.width) as f32 + jy,
                             ),
                             self.world.clone(),
+                            sample_vec.as_slice(),
                         )
                     })
                     .collect::<Vec<Vec3>>()

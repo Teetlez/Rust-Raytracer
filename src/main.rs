@@ -31,7 +31,7 @@ pub struct Args {
     samples: u32,
 
     // Number of frames to cumulate
-    #[arg(short, long, default_value_t = 64)]
+    #[arg(short, long, default_value_t = 128)]
     passes: u32,
 
     // Max number of times a ray can bounce
@@ -80,28 +80,28 @@ fn main() {
 
     // Make camera
 
-    // let camera = &mut Camera::new(
-    //     Vec3::new(13.0, 2.0, 3.0),
-    //     Vec3::new(0.0, 0.0, 0.0),
-    //     Vec3::new(0.0, 1.0, 0.0),
-    //     20.0,
-    //     args.width as f32 / args.height as f32,
-    //     0.15,
-    //     11.0,
-    // );
     let camera = &mut Camera::new(
-        Vec3::new(0.7, -0.2, -4.5),
+        Vec3::new(13.0, 2.0, 3.0),
         Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
-        60.0,
+        20.0,
         args.width as f32 / args.height as f32,
-        0.2,
-        5.0,
+        0.15,
+        11.0,
     );
+    // let camera = &mut Camera::new(
+    //     Vec3::new(0.7, -0.2, -4.5),
+    //     Vec3::new(0.0, 0.0, 0.0),
+    //     Vec3::new(0.0, 1.0, 0.0),
+    //     60.0,
+    //     args.width as f32 / args.height as f32,
+    //     0.2,
+    //     5.0,
+    // );
 
     // World setup
-    // let world = Arc::new(_random_scene(false, true, true, true, true));
-    let world = Arc::new(_box_scene());
+    let world = Arc::new(_random_scene(false, true, true, true, true));
+    // let world = Arc::new(_box_scene());
     let mut pass: u32 = 0;
     let mut total_times: Duration = Default::default();
 
@@ -205,36 +205,36 @@ fn _box_scene() -> Bvh {
         light,
     )));
 
-    // world.push(Arc::new(ABox::new(
-    //     (0.0, 0.5, -0.4),
-    //     (-6.0, -5.0, -8.4),
-    //     diffuse,
+    world.push(Arc::new(ABox::new(
+        (0.0, 0.5, -0.4),
+        (-6.0, -5.0, -8.4),
+        diffuse,
+    )));
+
+    // world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
+    // world.push(Arc::new(Sphere::new(
+    //     (0.0, -502.0, 0.0),
+    //     500.0,
+    //     diffuse_green,
     // )));
 
-    world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
-    world.push(Arc::new(Sphere::new(
-        (0.0, -502.0, 0.0),
-        500.0,
-        diffuse_green,
-    )));
+    // world.push(Arc::new(Sphere::new(
+    //     (503.0, 0.0, 0.0),
+    //     500.0,
+    //     diffuse_blue,
+    // )));
+    // world.push(Arc::new(Sphere::new(
+    //     (-503.0, 0.0, 0.0),
+    //     500.0,
+    //     diffuse_red,
+    // )));
 
-    world.push(Arc::new(Sphere::new(
-        (503.0, 0.0, 0.0),
-        500.0,
-        diffuse_blue,
-    )));
-    world.push(Arc::new(Sphere::new(
-        (-503.0, 0.0, 0.0),
-        500.0,
-        diffuse_red,
-    )));
-
-    world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
-    world.push(Arc::new(Sphere::new(
-        (0.0, 0.0, -505.0),
-        500.0,
-        diffuse_black,
-    )));
+    // world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
+    // world.push(Arc::new(Sphere::new(
+    //     (0.0, 0.0, -505.0),
+    //     500.0,
+    //     diffuse_black,
+    // )));
     Bvh::new(&mut world)
 }
 

@@ -23,7 +23,7 @@ pub fn random_in_unit_disk() -> Vec3 {
         (fastrand::f32() * 1.9) - 1.0,
         0.0,
     );
-    while rand_disk.mag() > 1.0 {
+    while rand_disk.mag_sq() > 1.0 {
         rand_disk = Vec3::new(
             (fastrand::f32() * 1.9) - 1.0,
             (fastrand::f32() * 1.9) - 1.0,
@@ -33,9 +33,8 @@ pub fn random_in_unit_disk() -> Vec3 {
     rand_disk
 }
 
-pub fn random_in_cosine_sphere() -> Vec3 {
-    let r1 = fastrand::f32();
-    let r2 = fastrand::f32();
+#[inline]
+pub fn random_in_cosine_sphere(r1: f32, r2: f32) -> Vec3 {
     let z = (1.0 - r2).sqrt();
     let phi = 2.0 * PI * r1;
     let x = phi.cos() * r2.sqrt();
@@ -43,9 +42,10 @@ pub fn random_in_cosine_sphere() -> Vec3 {
 
     Vec3::new(x, y, z)
 }
-pub fn random_in_hemisphere(normal: Vec3) -> Vec3 {
-    let in_unit_sphere = random_in_unit_sphere();
-    if in_unit_sphere.dot(normal) > 0.0 {
+#[inline]
+pub fn random_in_hemisphere(normal: Vec3, r1: f32, r2: f32) -> Vec3 {
+    let in_unit_sphere = Onb::from_w(&normal).local(random_in_cosine_sphere(r1, r2));
+    if in_unit_sphere.dot(normal) > f32::EPSILON {
         in_unit_sphere
     } else {
         -in_unit_sphere
@@ -59,3 +59,33 @@ pub fn random_unit_vector() -> Vec3 {
 }
 
 */
+
+struct Onb {
+    pub u: Vec3,
+    pub v: Vec3,
+    pub w: Vec3,
+}
+
+impl Onb {
+    pub fn _new(u: Vec3, v: Vec3, w: Vec3) -> Onb {
+        Onb { u, v, w }
+    }
+
+    #[inline]
+    pub fn from_w(n: &Vec3) -> Onb {
+        let w = n.normalized();
+        let a = if w.x.abs() > 0.9 {
+            Vec3::unit_y()
+        } else {
+            Vec3::unit_x()
+        };
+        let v = w.cross(a).normalized();
+        let u = w.cross(v);
+        Onb { u, v, w }
+    }
+
+    #[inline]
+    pub fn local(&self, a: Vec3) -> Vec3 {
+        a.x * self.u + a.y * self.v + a.z * self.w
+    }
+}
