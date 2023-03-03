@@ -64,9 +64,7 @@ fn ray_color(
             }
         } else {
             return if let Some(color) = get_pixel_from_vec(temp_ray.dir, image) {
-                color_total
-                    * Vec3::new(color[0], color[1], color[2])
-                        .clamped(Vec3::zero(), Vec3::one() * 64.0)
+                color_total * Vec3::new(color[0], color[1], color[2])
             } else {
                 let t = 0.5 * (temp_ray.dir.y + 1.0);
                 color_total * ((1.0 - t) * Vec3::one() + t * Vec3::new(0.5, 0.7, 1.0)) * 1.5

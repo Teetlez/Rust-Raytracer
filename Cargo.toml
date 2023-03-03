@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 mimalloc = { version = "0.1.17", default-features = false }
 minifb = "0.24"
-spherical_blue_noise = "0.1.1"
 quasirandom = "0.3.0"
 fastrand = "1.8.0"
 rayon = "1.6.1"
