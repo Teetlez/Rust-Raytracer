@@ -14,14 +14,13 @@ fn gaussian(x: f32, sigma: f32) -> f32 {
 pub fn bilateral_filter(
     pixel: &Vec3,
     current: usize,
-    img: &Vec<Vec3>,
-    width: u32,
-    height: u32,
+    img: &[Vec3],
+    dimension: (u32, u32),
     diameter: u32,
     sigma_i: f32,
     sigma_s: f32,
 ) -> Vec3 {
-    let (x, y) = (current as u32 % width, current as u32 / width);
+    let (x, y) = (current as u32 % dimension.0, current as u32 / dimension.0);
     let current_sum = pixel.x + pixel.y + pixel.z;
     let sum_scale = 1.0 / 3.0;
 
@@ -31,9 +30,9 @@ pub fn bilateral_filter(
 
     (0..diameter).for_each(|i| {
         (0..diameter).for_each(|j| {
-            let x_neighbor = (x - (half - i)).clamp(0, width - 1);
-            let y_neighbor = (y - (half - j)).clamp(0, height - 1);
-            let neighbor = img[((y_neighbor * width) + x_neighbor) as usize];
+            let x_neighbor = (x - (half - i)).clamp(0, dimension.0 - 1);
+            let y_neighbor = (y - (half - j)).clamp(0, dimension.1 - 1);
+            let neighbor = img[((y_neighbor * dimension.0) + x_neighbor) as usize];
             let neighbor_sum = neighbor.x + neighbor.y + neighbor.z;
 
             let gauss_i = gaussian(sum_scale * (neighbor_sum - current_sum), sigma_i);

@@ -238,10 +238,8 @@ impl Aabb {
 #[derive(Clone)]
 pub struct Bvh {
     aabb_box: Arc<Aabb>,
-    children: (
-        Option<Arc<dyn Hittable + Send + Sync>>,
-        Option<Arc<dyn Hittable + Send + Sync>>,
-    ),
+    left: Option<Arc<dyn Hittable + Send + Sync>>,
+    right: Option<Arc<dyn Hittable + Send + Sync>>,
 }
 
 impl Bvh {
@@ -281,7 +279,8 @@ impl Bvh {
 
         Bvh {
             aabb_box: surrounding,
-            children: (left, right),
+            left,
+            right,
         }
     }
 
@@ -317,8 +316,8 @@ impl Bvh {
 impl Hittable for Bvh {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         if self.aabb_box.hit(ray, t_min, t_max) {
-            if let Some(child_left) = self.children.0.as_ref() {
-                return if let Some(child_right) = self.children.1.as_ref() {
+            if let Some(child_left) = self.left.as_ref() {
+                return if let Some(child_right) = self.right.as_ref() {
                     if let Some(left) = child_left.hit(ray, t_min, t_max) {
                         if let Some(right) = child_right.hit(ray, t_min, left.t) {
                             Some(right)

@@ -63,14 +63,14 @@ impl Glossy {
 #[derive(Copy, Clone)]
 pub struct Metal {
     pub albedo: Vec3,
-    pub fuzz: f32,
+    pub roughness: f32,
     pub reflectance: f32,
 }
 
 impl Metal {
     pub fn scatter(self, ray: Ray, hit: HitRecord, _: &[(f32, f32)]) -> Scatter {
         let out_dir = ray.dir.reflected(hit.normal)
-            + (self.fuzz
+            + (self.roughness
                 * (1.9
                     - schlick(
                         self.reflectance * ray.dir.dot(hit.normal) / ray.dir.mag(),
@@ -155,10 +155,10 @@ impl Material {
         })
     }
 
-    pub fn metal(albedo: (f32, f32, f32), fuzz: f32, reflectance: f32) -> Material {
+    pub fn metal(albedo: (f32, f32, f32), roughness: f32, reflectance: f32) -> Material {
         Material::Metal(Metal {
             albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
-            fuzz,
+            roughness,
             reflectance,
         })
     }

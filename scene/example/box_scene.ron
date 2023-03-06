@@ -1,0 +1,59 @@
+Scene(
+    hdr: "C:\Git_Projects\Rust-Raytracer\scene\HDR\gear_store_2k.hdr",
+    camera: (
+        position: (0.0, 0.0, -10.0),
+        lookat: (0.0, 0.0, 0.0),
+        fov: 60.0,
+        focus_dist: 10.0,
+        apeture: 0.1,
+    ),
+    materials: {
+        "steel": (
+            surface_type:"metal",
+            albedo: (0.7, 0.7, 0.7),
+            roughness: 0.5,
+            reflectance: 0.5,
+        ),
+        "glass": (
+            surface_type:"dielectric"
+            albedo: (0.01,0.01,0.01)
+            refractive_index: 1.52,
+        ),
+        "diffuse": (
+            surface_type: "lambertian",
+            albedo: (0.7, 0.7, 0.7)
+        ),
+        "black_diffuse": (
+            surface_type: "lambertian",
+            albedo: (0.01, 0.01, 0.01)
+        ),
+        "red_diffuse": (
+            surface_type: "lambertian",
+            albedo: (1.0, 0.0, 0.0)
+        ),
+        "green_diffuse": (
+            surface_type: "lambertian",
+            albedo: (0.0, 1.0, 0.0)
+        ),
+        "blue_diffuse": (
+            surface_type: "lambertian",
+            albedo: (0.0, 0.0, 1.0)
+        )
+    },
+    objects: [
+        (
+            name: Some("sphere1"),
+            shape: "sphere",
+            position: (0.0, 0.0, 0.0),
+            radius: 1.0,
+            material: "glass"
+        ),
+        (
+            name: Some("box1"),
+            shape: "axis_box",
+            position: (3.0, 0.0, 0.0),
+            size: (1.0, 1.0, 1.0),
+            material: "steel"
+        )
+    ],
+)

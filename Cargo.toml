@@ -14,6 +14,9 @@ rayon = "1.6.1"
 ultraviolet = "0.9.0"
 radiant = "0.3.0"
 clap = { version = "4.1.6", features = ["derive"] }
+png = "0.17.7"
+serde = {version = "1.0.152", features = ["derive"]}
+ron = "0.8.0"
 
 [profile.release]
 lto = "fat"
