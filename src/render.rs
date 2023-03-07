@@ -100,6 +100,7 @@ fn color_only(ray: Ray, world: Arc<Bvh>, scatter_rng: &[(f32, f32)]) -> Vec3 {
     }
 }
 
+#[derive(Clone)]
 pub struct Renderer {
     pub width: usize,
     pub height: usize,

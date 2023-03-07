@@ -27,7 +27,7 @@ use clap::Parser;
 use minifb::{Key, Window, WindowOptions};
 use ultraviolet::Vec3;
 
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{filter::bilateral_filter, render::Renderer};
 #[derive(Parser, Debug)]
@@ -197,21 +197,24 @@ fn main() {
 
     if args.filter {
         // Apply Bilateral filter
-        (0..renderer.width * renderer.height).for_each(|index| {
-            buffer[index] = bilateral_filter(
-                &buffer[index],
-                index,
-                buffer.as_slice(),
-                (args.width as u32, args.height as u32),
-                3,
-                0.05,
-                1.0,
-            )
-        });
+        buffer = (0..renderer.width * renderer.height)
+            .into_par_iter()
+            .map(|index| {
+                bilateral_filter(
+                    &buffer[index],
+                    index,
+                    buffer.as_slice(),
+                    (args.width as u32, args.height as u32),
+                    3,
+                    0.05,
+                    1.0,
+                )
+            })
+            .collect();
     }
     // Solidify image buffer
     let final_img = buffer
-        .iter()
+        .par_iter()
         .map(|color| render::to_rgb(color, gamma))
         .collect::<Vec<u32>>();
 

@@ -179,7 +179,7 @@ impl Hittable for ABox {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Aabb {
     min: Vec3,
     max: Vec3,

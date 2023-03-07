@@ -3,7 +3,7 @@ use crate::{random, ray::Ray};
 
 use ultraviolet::Vec3;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Camera {
     pub eye: Vec3,
     lookat: Vec3,
