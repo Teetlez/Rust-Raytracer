@@ -76,11 +76,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
         let mat_obj = scene.materials.get(&obj.material).unwrap();
         let material = match mat_obj.surface_type.as_str() {
             "lambertian" => Material::lambertian(mat_obj.albedo),
-            "metal" => Material::metal(
-                mat_obj.albedo,
-                mat_obj.roughness.unwrap_or(0.0),
-                mat_obj.reflectance.unwrap_or(1.0),
-            ),
+            "metal" => Material::metal(mat_obj.albedo, mat_obj.roughness.unwrap_or(0.0)),
             "glossy" => Material::glossy(
                 mat_obj.albedo,
                 mat_obj.roughness.unwrap_or(0.0),
@@ -129,6 +125,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
         sample_rate: args.samples,
         max_bounce: args.bounces,
         hdr: Arc::new(image),
+        light_clamp: args.light_clamp,
     })
 }
 
@@ -181,7 +178,7 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
                         world.push(Arc::new(Sphere::new(
                             center,
                             0.2,
-                            Material::metal((albedo.0, albedo.1, albedo.2), fuzz, 5.0),
+                            Material::metal((albedo.0, albedo.1, albedo.2), fuzz),
                         )));
                     } else if lights && choose_mat < 0.9 {
                         // lights
@@ -212,7 +209,7 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
 
     let glass = Material::dielectric((0.1, 0.1, 0.1), 1.52);
     let gloss = Material::glossy((0.2, 0.1, 0.05), 0.2, 0.28);
-    let steel = Material::metal((0.7, 0.6, 0.5), 0.01, 1.1);
+    let steel = Material::metal((0.7, 0.6, 0.5), 0.01);
     // let diffuse = Material::lambertian((0.4, 0.2, 0.1));
 
     world.push(Arc::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));

@@ -64,20 +64,19 @@ impl Glossy {
 pub struct Metal {
     pub albedo: Vec3,
     pub roughness: f32,
-    pub reflectance: f32,
 }
 
 impl Metal {
     pub fn scatter(self, ray: Ray, hit: HitRecord, _: &[(f32, f32)]) -> Scatter {
-        let out_dir = ray.dir.reflected(hit.normal)
-            + (self.roughness
-                * (1.9
-                    - schlick(
-                        self.reflectance * ray.dir.dot(hit.normal) / ray.dir.mag(),
-                        self.reflectance + 1.0,
-                    ))
-                * random_in_unit_sphere());
-        Scatter::new(self.albedo, Ray::new(hit.point, out_dir))
+        let out_dir = ray.dir.reflected(hit.normal) + (self.roughness * random_in_unit_sphere());
+        Scatter::new(
+            {
+                let cosine = ((-ray.dir).dot(hit.normal)).min(1.0);
+                (self.albedo + (Vec3::one() - self.albedo) * (1.0 - cosine).powi(5))
+                    .clamped(Vec3::zero(), Vec3::one())
+            },
+            Ray::new(hit.point, out_dir),
+        )
     }
 }
 
@@ -155,11 +154,10 @@ impl Material {
         })
     }
 
-    pub fn metal(albedo: (f32, f32, f32), roughness: f32, reflectance: f32) -> Material {
+    pub fn metal(albedo: (f32, f32, f32), roughness: f32) -> Material {
         Material::Metal(Metal {
             albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
             roughness,
-            reflectance,
         })
     }
 

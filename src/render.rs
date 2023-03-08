@@ -50,6 +50,7 @@ fn ray_color(
     depth: u32,
     image: Arc<Image>,
     scatter_rng: &[(f32, f32)],
+    light_clamp: f32,
 ) -> Vec3 {
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
@@ -60,11 +61,16 @@ fn ray_color(
                 color_total *= scatter.attenuation;
                 temp_ray = scatter.ray;
             } else {
-                return color_total * scatter.attenuation;
+                return color_total
+                    * scatter
+                        .attenuation
+                        .clamped(Vec3::zero(), Vec3::one() * light_clamp);
             }
         } else {
             return if let Some(color) = get_pixel_from_vec(temp_ray.dir, image) {
-                color_total * Vec3::new(color[0], color[1], color[2])
+                color_total
+                    * Vec3::new(color[0], color[1], color[2])
+                        .clamped(Vec3::zero(), Vec3::one() * light_clamp)
             } else {
                 let t = 0.5 * (temp_ray.dir.y + 1.0);
                 color_total * ((1.0 - t) * Vec3::one() + t * Vec3::new(0.5, 0.7, 1.0)) * 1.5
@@ -109,6 +115,7 @@ pub struct Renderer {
     pub sample_rate: u32,
     pub max_bounce: u32,
     pub hdr: Arc<Image>,
+    pub light_clamp: f32,
 }
 impl Renderer {
     pub fn render(&self, buffer: &[Vec3]) -> Vec<Vec3> {
@@ -135,7 +142,17 @@ impl Renderer {
                                 self.max_bounce,
                                 hdr.clone(),
                                 sample_vec.as_slice(),
+                                self.light_clamp,
                             );
+                            if pixel_color.x != pixel_color.x {
+                                pixel_color.x = 0.0;
+                            }
+                            if pixel_color.y != pixel_color.y {
+                                pixel_color.y = 0.0;
+                            }
+                            if pixel_color.z != pixel_color.z {
+                                pixel_color.z = 0.0;
+                            }
                         });
 
                         buffer[*pixel] + (pixel_color / self.sample_rate as f32)

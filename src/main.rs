@@ -15,6 +15,7 @@ extern crate minifb;
 extern crate serde;
 extern crate ultraviolet;
 use std::{
+    f32::INFINITY,
     fs::File,
     io::BufReader,
     path::Path,
@@ -41,7 +42,7 @@ pub struct Args {
     samples: u32,
 
     /// Number of frames to cumulate
-    #[arg(short, long, default_value_t = 128)]
+    #[arg(short, long, default_value_t = 64)]
     passes: u32,
 
     /// Max number of times a ray can bounce
@@ -61,8 +62,8 @@ pub struct Args {
     gamma: f32,
 
     /// Max light brightness
-    #[arg(short, long, default_value_t = -1.0)]
-    clamp_light: f32,
+    #[arg(short, long, default_value_t = INFINITY)]
+    light_clamp: f32,
 
     /// apply bilateral filter after render to reduce noise
     #[arg(short, long, default_value_t = false)]
@@ -117,6 +118,7 @@ fn main() {
             sample_rate: args.samples,
             max_bounce: args.bounces,
             hdr: image,
+            light_clamp: INFINITY,
         }
     };
 
