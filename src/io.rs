@@ -63,13 +63,12 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
     let scene: Scene = ron::de::from_str(&contents)?;
 
     println!("loading hdr");
-    file =
-        File::open(scene.hdr.unwrap_or(
-            r"C:\Git_Projects\Rust-Raytracer\scene\HDR\mud_road_puresky_2k.hdr".to_owned(),
-        ))
-        .expect("Failed to open specified file");
-    let reader = BufReader::new(file);
-    let image = radiant::load(reader).expect("Failed to load image data");
+    let image = if let Ok(f) = File::open(scene.hdr.unwrap_or("".to_string())) {
+        let reader = BufReader::new(f);
+        Arc::new(radiant::load(reader).ok())
+    } else {
+        Arc::new(None)
+    };
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
     println!("loading objects & materials");
     scene.objects.into_iter().for_each(|obj| {
@@ -124,7 +123,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
         world: Arc::new(bvh),
         sample_rate: args.samples,
         max_bounce: args.bounces,
-        hdr: Arc::new(image),
+        hdr: image,
         light_clamp: args.light_clamp,
     })
 }
@@ -139,7 +138,7 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
     )));
     if lights || diffuse || glossy || metal || glass {
         for a in -11..11 {
-            for b in -10..7 {
+            for b in -11..11 {
                 let choose_mat = fastrand::f32();
                 let center = (
                     a as f32 + 0.9 * fastrand::f32(),
@@ -159,11 +158,7 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
                         world.push(Arc::new(Sphere::new(
                             center,
                             0.2,
-                            Material::glossy(
-                                albedo,
-                                fastrand::f32() * 0.5,
-                                (fastrand::f32() * 0.5) + 1.0,
-                            ),
+                            Material::glossy(albedo, fastrand::f32(), fastrand::f32() + 0.2),
                         )));
                     } else if diffuse && choose_mat < 0.6 {
                         // diffuse

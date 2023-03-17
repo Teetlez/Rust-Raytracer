@@ -92,10 +92,13 @@ fn main() {
         io::load_scene(Path::new(path), &args).unwrap()
     } else {
         // Load HDR
-        let f = File::open(r"C:\Git_Projects\Rust-Raytracer\scene\HDR\mud_road_puresky_2k.hdr")
-            .expect("Failed to open specified file");
-        let f = BufReader::new(f);
-        let image = Arc::new(radiant::load(f).expect("Failed to load image data"));
+        let image = if let Ok(f) = File::open(r"C:\Git_Projects\Rust-Raytracer\scene\HDR\kloetzle_lei_2k.hdr")
+        {
+            let reader = BufReader::new(f);
+            Arc::new(radiant::load(reader).ok())
+        } else {
+            Arc::new(None)
+        };
 
         // Make camera
         let camera = &mut Camera::new(
@@ -109,7 +112,7 @@ fn main() {
         );
 
         // World setup
-        let world = Arc::new(io::random_scene(false, true, true, true, true));
+        let world = Arc::new(io::random_scene(true, true, true, true, true));
         Renderer {
             width: args.width,
             height: args.height,

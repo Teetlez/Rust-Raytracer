@@ -45,7 +45,7 @@ pub fn random_in_cosine_sphere(r1: f32, r2: f32) -> Vec3 {
 #[inline]
 pub fn random_in_hemisphere(normal: Vec3, r1: f32, r2: f32) -> Vec3 {
     let in_unit_sphere = Onb::from_w(&normal).local(random_in_cosine_sphere(r1, r2));
-    if in_unit_sphere.dot(normal) > f32::EPSILON {
+    if in_unit_sphere.dot(normal) > 0.0 {
         in_unit_sphere
     } else {
         -in_unit_sphere

@@ -46,13 +46,13 @@ impl Glossy {
             ((-ray.dir).dot(hit.normal)).min(1.0),
             1.00028 / (1.0 + self.reflectance),
         );
-        let (color, out_dir) = if fastrand::f32() < reflection_prob {
+        let (r1, r2) = scatter_rng[fastrand::usize(0..scatter_rng.len())];
+        let (color, out_dir) = if r1 < reflection_prob {
             (
-                Vec3::one() * 0.99,
+                Vec3::one() * 0.9,
                 ray.dir.reflected(hit.normal) + (self.roughness * random_in_unit_sphere()),
             )
         } else {
-            let (r1, r2) = scatter_rng[fastrand::usize(0..scatter_rng.len())];
             let direction = random_in_hemisphere(hit.normal, r1, r2);
             (self.albedo, direction)
         };
