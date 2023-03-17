@@ -169,7 +169,7 @@ impl Material {
     }
 
     pub fn scatter(self, ray: Ray, hit: HitRecord, scatter_rng: &[(f32, f32)]) -> Scatter {
-        match hit.material {
+        match hit.material.as_ref() {
             Material::Dielectric(d) => d.scatter(ray, hit, scatter_rng),
             Material::Lambertian(l) => l.scatter(ray, hit, scatter_rng),
             Material::Metal(m) => m.scatter(ray, hit, scatter_rng),

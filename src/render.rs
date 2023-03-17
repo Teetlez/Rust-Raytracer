@@ -144,13 +144,13 @@ impl Renderer {
                                 sample_vec.as_slice(),
                                 self.light_clamp,
                             );
-                            if pixel_color.x != pixel_color.x {
+                            if pixel_color.x.is_nan() {
                                 pixel_color.x = 0.0;
                             }
-                            if pixel_color.y != pixel_color.y {
+                            if pixel_color.y.is_nan() {
                                 pixel_color.y = 0.0;
                             }
-                            if pixel_color.z != pixel_color.z {
+                            if pixel_color.z.is_nan() {
                                 pixel_color.z = 0.0;
                             }
                         });
