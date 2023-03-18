@@ -54,7 +54,7 @@ fn ray_color(
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
     for _ in 0..depth {
-        if let Some(hit) = world.hit(&temp_ray, 0.0001, 1000.0) {
+        if let Some(hit) = world.hit(&temp_ray, 0.0002, 1000000.0) {
             let scatter: Scatter = hit.material.scatter(temp_ray, hit, scatter_rng);
             if scatter.attenuation.component_max() <= 1.0 + f32::EPSILON {
                 color_total *= scatter.attenuation;
@@ -99,8 +99,8 @@ fn color_only(
     image: Arc<Option<Image>>,
     scatter_rng: &[(f32, f32)],
 ) -> Vec3 {
-    if let Some(hit) = world.hit(&ray, 0.0002, 100.0) {
-        ((2.5 + (Vec3::new(1.0, 1.0, -0.5)).normalized().dot(hit.normal)) / hit.t)
+    if let Some(hit) = world.hit(&ray, 0.001, 100000.0) {
+        (Vec3::new(1.0, 1.0, -0.5)).normalized().dot(hit.normal)
             * hit.material.scatter(ray, hit, scatter_rng).attenuation
     } else {
         get_sky(ray, image, INFINITY)

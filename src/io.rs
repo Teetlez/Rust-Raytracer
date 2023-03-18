@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 use ultraviolet::Vec3;
 
-use crate::hittable::{ABox, Bvh, Hittable, Sphere};
+use crate::hittable::{ABox, Bvh, Cube, Hittable, Sphere};
 use crate::material::Material;
 use crate::render::Renderer;
 use crate::{camera, Args};
@@ -27,6 +27,7 @@ struct Object {
     position: (f32, f32, f32),
     radius: Option<f32>,
     size: Option<(f32, f32, f32)>,
+    rotation: Option<(f32, f32, f32)>,
     material: String,
 }
 
@@ -102,6 +103,12 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                     material,
                 )));
             }
+            "box" => world.push(Arc::new(Cube::new(
+                obj.position,
+                obj.size.unwrap_or((1.0, 1.0, 1.0)),
+                obj.rotation.unwrap_or((0.0, 0.0, 0.0)),
+                material,
+            ))),
             _ => panic!("Found shape type that doesn't exist"),
         }
     });

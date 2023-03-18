@@ -2,7 +2,7 @@ use std::{cmp::Ordering, sync::Arc};
 
 use crate::{material::Material, ray::Ray};
 
-use ultraviolet::{Vec3, Vec4};
+use ultraviolet::{Rotor3, Vec3, Vec4};
 
 pub trait Hittable {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
@@ -88,6 +88,7 @@ impl Hittable for Sphere {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct ABox {
     pub min: Vec3,
     pub max: Vec3,
@@ -160,6 +161,76 @@ impl Hittable for ABox {
             min: self.min,
             max: self.max,
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Cube {
+    pub axis_box: ABox,
+    center: Vec3,
+    pub rotation: Rotor3,
+}
+
+impl Cube {
+    pub fn new(
+        center: (f32, f32, f32),
+        size: (f32, f32, f32),
+        rotation: (f32, f32, f32),
+        mat: Material,
+    ) -> Cube {
+        Cube {
+            axis_box: ABox::new(center, size, mat),
+            center: Vec3::from(center),
+            rotation: Rotor3::from_euler_angles(rotation.2, rotation.0, rotation.1).normalized(),
+        }
+    }
+}
+
+impl Hittable for Cube {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        let rot_pos = (ray.pos - self.center).rotated_by(self.rotation.reversed()) + self.center;
+        let rot_dir = ray.dir.rotated_by(self.rotation.reversed());
+
+        if let Some(hit) = self.axis_box.hit(&Ray::new(rot_pos, rot_dir), t_min, t_max) {
+            Some(HitRecord {
+                t: hit.t,
+                point: ray.at(hit.t),
+                normal: hit.normal.rotated_by(self.rotation),
+                material: hit.material,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn bounding_box(&self) -> Aabb {
+        let bbox = self.axis_box.bounding_box();
+        let vec_box = [
+            Vec3::new(bbox.min.x, bbox.min.y, bbox.min.z),
+            Vec3::new(bbox.max.x, bbox.min.y, bbox.min.z),
+            Vec3::new(bbox.min.x, bbox.max.y, bbox.min.z),
+            Vec3::new(bbox.max.x, bbox.max.y, bbox.min.z),
+            Vec3::new(bbox.min.x, bbox.min.y, bbox.max.z),
+            Vec3::new(bbox.max.x, bbox.min.y, bbox.max.z),
+            Vec3::new(bbox.min.x, bbox.max.y, bbox.max.z),
+            Vec3::new(bbox.max.x, bbox.max.y, bbox.max.z),
+        ];
+        let transformed_vecs = vec_box
+            .iter()
+            .map(|vec| (*vec - self.center).rotated_by(self.rotation) + self.center);
+        let (min, max) = transformed_vecs.fold(
+            (
+                Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
+                Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
+            ),
+            |(min, max), vec| {
+                (
+                    Vec3::new(min.x.min(vec.x), min.y.min(vec.y), min.z.min(vec.z)),
+                    Vec3::new(max.x.max(vec.x), max.y.max(vec.y), max.z.max(vec.z)),
+                )
+            },
+        );
+        Aabb { min, max }
     }
 }
 

@@ -6,7 +6,7 @@ use crate::{
 
 use ultraviolet::Vec3;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Scatter {
     pub attenuation: Vec3,
     pub ray: Ray,
@@ -18,7 +18,7 @@ impl Scatter {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Lambertian {
     pub albedo: Vec3,
 }
@@ -33,7 +33,7 @@ impl Lambertian {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Glossy {
     pub albedo: Vec3,
     pub roughness: f32,
@@ -60,7 +60,7 @@ impl Glossy {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Metal {
     pub albedo: Vec3,
     pub roughness: f32,
@@ -80,7 +80,7 @@ impl Metal {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Dielectric {
     pub albedo: Vec3,
     pub refractive_index: f32,
@@ -131,7 +131,7 @@ impl Dielectric {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Material {
     Dielectric(Dielectric),
     Lambertian(Lambertian),
