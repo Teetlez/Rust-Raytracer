@@ -82,9 +82,11 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                 mat_obj.roughness.unwrap_or(0.0),
                 mat_obj.reflectance.unwrap_or(1.0),
             ),
-            "dielectric" => {
-                Material::dielectric(mat_obj.albedo, mat_obj.refractive_index.unwrap_or(1.52))
-            }
+            "dielectric" => Material::dielectric(
+                mat_obj.albedo,
+                mat_obj.refractive_index.unwrap_or(1.52),
+                mat_obj.roughness.unwrap_or(0.0),
+            ),
             _ => panic!("Found material type that doesn't exist"),
         };
 
@@ -201,6 +203,7 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
                             Material::dielectric(
                                 (fastrand::f32(), fastrand::f32(), fastrand::f32()),
                                 1.52,
+                                fastrand::f32() * 0.5,
                             ),
                         )));
                     }
@@ -209,9 +212,9 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
         }
     }
 
-    let glass = Material::dielectric((0.1, 0.1, 0.1), 1.52);
-    let gloss = Material::glossy((0.2, 0.1, 0.05), 0.2, 0.28);
-    let steel = Material::metal((0.7, 0.6, 0.5), 0.01);
+    let glass = Material::dielectric((0.1, 0.1, 0.1), 1.52, 0.0);
+    let gloss = Material::glossy((0.3, 0.2, 0.15), 0.2, 0.28);
+    let steel = Material::metal((0.7, 0.5, 0.3), 0.001);
     // let diffuse = Material::lambertian((0.4, 0.2, 0.1));
 
     world.push(Arc::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));

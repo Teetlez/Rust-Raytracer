@@ -92,7 +92,8 @@ fn main() {
         io::load_scene(Path::new(path), &args).unwrap()
     } else {
         // Load HDR
-        let image = if let Ok(f) = File::open(r"C:\Git_Projects\Rust-Raytracer\scene\HDR\kloetzle_lei_2k.hdr")
+        let image = if let Ok(f) =
+            File::open(r"C:\Git_Projects\Rust-Raytracer\scene\HDR\kloetzle_lei_2k.hdr")
         {
             let reader = BufReader::new(f);
             Arc::new(radiant::load(reader).ok())
@@ -107,8 +108,8 @@ fn main() {
             Vec3::unit_y(),
             20.0,
             args.width as f32 / args.height as f32,
-            0.15,
-            11.0,
+            0.1,
+            10.0,
         );
 
         // World setup

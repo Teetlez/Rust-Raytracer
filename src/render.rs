@@ -11,6 +11,9 @@ use radiant::Image;
 use rayon::prelude::*;
 use ultraviolet::{Mat3, Vec3};
 
+const T_MIN: f32 = 0.00015;
+const T_MAX: f32 = 100000.0;
+
 // Tonemapping constants
 const M1: Mat3 = Mat3::new(
     Vec3::new(0.59719, 0.07600, 0.02840),
@@ -48,16 +51,21 @@ fn ray_color(
     world: Arc<Bvh>,
     depth: u32,
     image: Arc<Option<Image>>,
-    scatter_rng: &[(f32, f32)],
     light_clamp: f32,
 ) -> Vec3 {
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
     for _ in 0..depth {
-        if let Some(hit) = world.hit(&temp_ray, 0.0002, 1000000.0) {
-            let scatter: Scatter = hit.material.scatter(temp_ray, hit, scatter_rng);
-            if scatter.attenuation.component_max() <= 1.0 + f32::EPSILON {
+        if let Some(hit) = world.hit(&temp_ray, T_MIN, T_MAX) {
+            let scatter: Scatter =
+                hit.material
+                    .scatter(temp_ray, hit, fastrand::f32(), fastrand::f32());
+            if scatter.attenuation.component_max() <= 1.0 {
                 color_total *= scatter.attenuation;
+                if color_total.component_max() < fastrand::f32() {
+                    break;
+                }
+                color_total *= color_total.component_max().recip();
                 temp_ray = scatter.ray;
             } else {
                 return color_total
@@ -93,15 +101,16 @@ fn get_pixel_from_vec(dir: Vec3, image: Arc<Option<Image>>) -> Option<Vec3> {
 }
 
 #[inline]
-fn color_only(
-    ray: Ray,
-    world: Arc<Bvh>,
-    image: Arc<Option<Image>>,
-    scatter_rng: &[(f32, f32)],
-) -> Vec3 {
-    if let Some(hit) = world.hit(&ray, 0.001, 100000.0) {
-        (Vec3::new(1.0, 1.0, -0.5)).normalized().dot(hit.normal)
-            * hit.material.scatter(ray, hit, scatter_rng).attenuation
+fn color_only(ray: Ray, world: Arc<Bvh>, image: Arc<Option<Image>>) -> Vec3 {
+    if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
+        (Vec3::new(1.0, 1.0, -0.5))
+            .normalized()
+            .dot(hit.normal)
+            .clamp(0.1, 1.0)
+            * hit
+                .material
+                .scatter(ray, hit, fastrand::f32(), fastrand::f32())
+                .attenuation
     } else {
         get_sky(ray, image, INFINITY)
     }
@@ -112,7 +121,7 @@ fn get_sky(ray: Ray, image: Arc<Option<Image>>, light_clamp: f32) -> Vec3 {
     if let Some(color) = get_pixel_from_vec(ray.dir, image) {
         Vec3::new(color[0], color[1], color[2]).clamped(Vec3::zero(), Vec3::one() * light_clamp)
     } else {
-        let t = 0.5 * (ray.dir.dot(Vec3::new(-1.0, 1.0, 0.5).normalized()) + 1.0);
+        let t = 0.5 * (ray.dir.dot(Vec3::new(-1.0, 0.75, 0.5).normalized()) + 1.0);
         ((1.0 - t) * Vec3::one() + t * Vec3::new(0.1, 0.3, 0.8)) * 2.0
     }
 }
@@ -145,14 +154,16 @@ impl Renderer {
                         let x = (pixel % self.width) as f32;
                         let y = (self.height - 1 - pixel / self.width) as f32;
                         let mut pixel_color = Vec3::zero();
-                        (0..self.sample_rate).for_each(|i| {
-                            let (jx, jy) = sample_vec[i as usize];
+                        let mut offset = fastrand::usize(0..sample_vec.len());
+                        (0..self.sample_rate).for_each(|_| {
+                            let (jx, jy) = sample_vec[offset % sample_vec.len()];
+                            offset += 1;
+
                             pixel_color += ray_color(
-                                self.camera.gen_ray(self.width, self.height, x + jx, y + jy),
+                                self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
                                 self.world.clone(),
                                 self.max_bounce,
                                 hdr.clone(),
-                                sample_vec.as_slice(),
                                 self.light_clamp,
                             );
                             if !pixel_color.x.is_finite() {
@@ -165,7 +176,6 @@ impl Renderer {
                                 pixel_color.z = 0.0;
                             }
                         });
-
                         buffer[*pixel] + (pixel_color / self.sample_rate as f32)
                     })
                     .collect::<Vec<Vec3>>()
@@ -180,23 +190,26 @@ impl Renderer {
             .chunks((self.width * self.height) / 64)
             .flat_map(|chunk| {
                 let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
-                let sample_vec = (0..chunk.len())
+                let sample_vec = (0..(chunk.len() as usize))
                     .map(|_| qrng.gen())
                     .collect::<Vec<(f32, f32)>>();
+                let mut offset = fastrand::usize(0..sample_vec.len());
                 chunk
                     .iter()
                     .map(|pixel| {
-                        let (jx, jy) = qrng.gen();
+                        offset += 1;
+                        let (jx, jy) = sample_vec[offset % sample_vec.len()];
                         color_only(
                             self.camera.gen_ray(
                                 self.width,
                                 self.height,
-                                (pixel % self.width) as f32 + jx,
-                                (self.height - 1 - pixel / self.width) as f32 + jy,
+                                (pixel % self.width) as f32,
+                                (self.height - 1 - pixel / self.width) as f32,
+                                jx,
+                                jy,
                             ),
                             self.world.clone(),
                             self.hdr.clone(),
-                            sample_vec.as_slice(),
                         )
                     })
                     .collect::<Vec<Vec3>>()

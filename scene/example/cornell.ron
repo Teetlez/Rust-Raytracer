@@ -70,7 +70,7 @@ Scene(
             shape: "box",
             position: (-1.8, -3.5, -1.8),
             size: Some((3.0, 3.0, 3.0)),
-            rotation: Some((0.0, 0.30, 0.0)),
+            rotation: Some((0.0, 0.32, 0.0)),
             material: "diffuse"
         ),
         // (
@@ -132,8 +132,8 @@ Scene(
         (
             name: Some("light"),
             shape: "axis_box",
-            position: (0.0, 4.98, 0.5),
-            size: Some((2.5, 0.01, 2.5)),
+            position: (0.0, 4.99, 0.5),
+            size: Some((2.8, 0.01, 2.8)),
             material: "light"
         ),
         // (

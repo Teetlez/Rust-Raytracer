@@ -23,6 +23,7 @@ Scene(
             surface_type:"dielectric",
             albedo: (0.6, 0.1, 0.25),
             refractive_index: Some(1.52),
+            roughness: Some(0.0),
         ),
         "diffuse": (
             surface_type: "lambertian",
