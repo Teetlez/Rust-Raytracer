@@ -29,13 +29,13 @@ Scene(
             (2.0, 2.0, 2.0),  // albedo
         ),
         "red_diffuse": Lambertian(
-            (1.0, 0.0, 0.0),  // albedo
+            (0.75, 0.05, 0.05),  // albedo
         ),
         "green_diffuse": Lambertian(
-            (0.0, 1.0, 0.0),  // albedo
+            (0.05, 0.70, 0.05), // albedo
         ),
         "blue_diffuse": Lambertian(
-            (0.0, 0.0, 1.0),  // albedo
+            (0.05, 0.1, 0.85),  // albedo
         )
     },
     objects: [

@@ -29,7 +29,7 @@ Scene(
             (15.0, 15.0, 15.0),
         ),
         "black": Lambertian(
-            (0.0, 0.0, 0.0),
+            (0.05, 0.05, 0.05),
         ),
         "red_diffuse": Lambertian(
             (0.65, 0.05, 0.05),
@@ -38,17 +38,10 @@ Scene(
             (0.12, 0.45, 0.15),
         ),
         "blue_diffuse": Lambertian(
-            (0.0, 0.0, 1.0),
+            (0.05, 0.1, 0.85),
         )
     },
     objects: [
-        // (
-        //     name: Some("sphere1"),
-        //     shape: "sphere",
-        //     position: (1.5, -1.0, 2.5),
-        //     radius: Some(1.0),
-        //     material: "steel"
-        // ),
         (
             name: Some("box1"),
             shape: Box(
@@ -67,13 +60,6 @@ Scene(
             ),
             material: "diffuse"
         ),
-        // (
-        //     name: Some("sphere2"),
-        //     shape: "sphere",
-        //     (-1.5, -1.0, 0.5),
-        //     radius: Some(1.0),
-        //     material: "glass"
-        // ),
         (
             name: Some("room"),
             shape: AxisBox(
@@ -92,7 +78,7 @@ Scene(
         ),
         (
             name: Some("floor"),
-            shape:AxisBox(
+            shape: AxisBox(
                 (0.0, -5.0, 0.0),
                 Some((10.0, 0.01, 10.0)),
             ),
