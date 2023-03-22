@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 use ultraviolet::Vec3;
 
-use crate::hittable::{ABox, Bvh, Cube, Hittable, Sphere};
+use crate::hittable::{ABox, Bvh, Cube, Hittable, Sphere, Triangle};
 use crate::material::Material;
 use crate::render::Renderer;
 use crate::{camera, Args};
@@ -23,21 +23,55 @@ struct Scene {
 #[derive(Debug, Deserialize, Serialize)]
 struct Object {
     name: Option<String>,
-    shape: String,
-    position: (f32, f32, f32),
-    radius: Option<f32>,
-    size: Option<(f32, f32, f32)>,
-    rotation: Option<(f32, f32, f32)>,
+    shape: Shape,
     material: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct Surface {
-    surface_type: String,
-    albedo: (f32, f32, f32),
-    roughness: Option<f32>,
-    reflectance: Option<f32>,
-    refractive_index: Option<f32>,
+enum Shape {
+    Sphere(
+        (f32, f32, f32), // position
+        Option<f32>,     // raduis
+    ),
+    Triangle(
+        ([f32; 3], [f32; 3], [f32; 3]), // vertices
+    ),
+    Box(
+        (f32, f32, f32),         // position
+        Option<(f32, f32, f32)>, // size
+        Option<(f32, f32, f32)>, // rotation
+    ),
+    AxisBox(
+        (f32, f32, f32),         // position
+        Option<(f32, f32, f32)>, // size
+    ),
+    Model(
+        String,                  // file path
+        Option<(f32, f32, f32)>, // translation
+        Option<(f32, f32, f32)>, // scale
+        Option<(f32, f32, f32)>, // rotation
+    ),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+enum Surface {
+    Lambertian(
+        (f32, f32, f32), // albedo
+    ),
+    Glossy(
+        (f32, f32, f32), // albedo
+        Option<f32>,     // roughness
+        Option<f32>,     // reflectence
+    ),
+    Metal(
+        (f32, f32, f32), // albedo
+        Option<f32>,     // roughness
+    ),
+    Dielectric(
+        (f32, f32, f32), // absorption
+        Option<f32>,     // refractive_index
+        Option<f32>,     // roughness
+    ),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -73,45 +107,54 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
     println!("loading objects & materials");
     scene.objects.into_iter().for_each(|obj| {
-        let mat_obj = scene.materials.get(&obj.material).unwrap();
-        let material = match mat_obj.surface_type.as_str() {
-            "lambertian" => Material::lambertian(mat_obj.albedo),
-            "metal" => Material::metal(mat_obj.albedo, mat_obj.roughness.unwrap_or(0.0)),
-            "glossy" => Material::glossy(
-                mat_obj.albedo,
-                mat_obj.roughness.unwrap_or(0.0),
-                mat_obj.reflectance.unwrap_or(1.0),
+        let material = match *scene.materials.get(&obj.material).unwrap() {
+            Surface::Lambertian(albedo) => Material::lambertian(albedo),
+            Surface::Metal(albedo, roughness) => Material::metal(albedo, roughness.unwrap_or(0.0)),
+            Surface::Glossy(albedo, roughness, reflectance) => {
+                Material::glossy(albedo, roughness.unwrap_or(0.0), reflectance.unwrap_or(1.0))
+            }
+            Surface::Dielectric(absorption, refractive_index, roughness) => Material::dielectric(
+                absorption,
+                refractive_index.unwrap_or(1.52),
+                roughness.unwrap_or(0.0),
             ),
-            "dielectric" => Material::dielectric(
-                mat_obj.albedo,
-                mat_obj.refractive_index.unwrap_or(1.52),
-                mat_obj.roughness.unwrap_or(0.0),
-            ),
-            _ => panic!("Found material type that doesn't exist"),
         };
 
-        match obj.shape.as_str() {
-            "sphere" => {
+        match obj.shape {
+            Shape::Sphere(position, radius) => {
                 world.push(Arc::new(Sphere::new(
-                    obj.position,
-                    obj.radius.unwrap_or(1.0),
+                    position,
+                    radius.unwrap_or(1.0),
                     material,
                 )));
             }
-            "axis_box" => {
-                world.push(Arc::new(ABox::new(
-                    obj.position,
-                    obj.size.unwrap_or((1.0, 1.0, 1.0)),
+            Shape::Triangle(vertices) => {
+                world.push(Arc::new(Triangle::new(
+                    [
+                        Vec3::from(vertices.0),
+                        Vec3::from(vertices.1),
+                        Vec3::from(vertices.2),
+                    ],
+                    true,
                     material,
                 )));
             }
-            "box" => world.push(Arc::new(Cube::new(
-                obj.position,
-                obj.size.unwrap_or((1.0, 1.0, 1.0)),
-                obj.rotation.unwrap_or((0.0, 0.0, 0.0)),
+            Shape::Box(position, size, rotation) => world.push(Arc::new(Cube::new(
+                position,
+                size.unwrap_or((1.0, 1.0, 1.0)),
+                rotation.unwrap_or((0.0, 0.0, 0.0)),
                 material,
             ))),
-            _ => panic!("Found shape type that doesn't exist"),
+            Shape::AxisBox(position, size) => {
+                world.push(Arc::new(ABox::new(
+                    position,
+                    size.unwrap_or((1.0, 1.0, 1.0)),
+                    material,
+                )));
+            }
+            Shape::Model(_location, _translation, _size, _rotation) => {
+                todo!("Model loading not yet implemented")
+            }
         }
     });
     println!("building BVH");

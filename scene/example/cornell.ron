@@ -8,45 +8,37 @@ Scene(
         apeture: 0.01,
     ),
     materials: {
-        "steel": (
-            surface_type:"metal",
-            albedo: (0.7, 0.7, 0.7),
-            roughness: Some(0.05),
+        "steel": Metal(
+            (0.7, 0.7, 0.7),
+            Some(0.05),
         ),
-        "glossy": (
-            surface_type:"glossy",
-            albedo: (0.7, 0.7, 0.7),
-            roughness: Some(0.05),
-            reflectance: Some(1.5),
+        "glossy": Glossy(
+            (0.7, 0.7, 0.7),
+            Some(0.05),
+            Some(1.5),
         ),
-        "glass": (
-            surface_type:"dielectric",
-            albedo: (0.6, 0.1, 0.25),
-            refractive_index: Some(1.52),
+        "glass": Dielectric(
+            (0.6, 0.1, 0.25),
+            Some(1.52),
+            Some(0.0)
         ),
-        "diffuse": (
-            surface_type: "lambertian",
-            albedo: (0.73, 0.73, 0.73),
+        "diffuse": Lambertian(
+            (0.73, 0.73, 0.73),
         ),
-        "light": (
-            surface_type: "lambertian",
-            albedo: (15.0, 15.0, 15.0),
+        "light": Lambertian(
+            (15.0, 15.0, 15.0),
         ),
-        "black": (
-            surface_type: "lambertian",
-            albedo: (0.0, 0.0, 0.0),
+        "black": Lambertian(
+            (0.0, 0.0, 0.0),
         ),
-        "red_diffuse": (
-            surface_type: "lambertian",
-            albedo: (0.65, 0.05, 0.05),
+        "red_diffuse": Lambertian(
+            (0.65, 0.05, 0.05),
         ),
-        "green_diffuse": (
-            surface_type: "lambertian",
-            albedo: (0.12, 0.45, 0.15),
+        "green_diffuse": Lambertian(
+            (0.12, 0.45, 0.15),
         ),
-        "blue_diffuse": (
-            surface_type: "lambertian",
-            albedo: (0.0, 0.0, 1.0),
+        "blue_diffuse": Lambertian(
+            (0.0, 0.0, 1.0),
         )
     },
     objects: [
@@ -59,89 +51,84 @@ Scene(
         // ),
         (
             name: Some("box1"),
-            shape: "box",
-            position: (1.6, -2.0, 1.5),
-            size: Some((3.0, 6.0, 3.0)),
-            rotation: Some((0.0, -0.24, 0.0)),
+            shape: Box(
+                (1.6, -2.0, 1.5),
+                Some((3.0, 6.0, 3.0)),
+                Some((0.0, -0.24, 0.0)),
+            ),
             material: "diffuse"
         ),
         (
             name: Some("box2"),
-            shape: "box",
-            position: (-1.8, -3.5, -1.8),
-            size: Some((3.0, 3.0, 3.0)),
-            rotation: Some((0.0, 0.32, 0.0)),
+            shape: Box(
+                (-1.8, -3.5, -1.8),
+                Some((3.0, 3.0, 3.0)),
+                Some((0.0, 0.32, 0.0)),
+            ),
             material: "diffuse"
         ),
         // (
         //     name: Some("sphere2"),
         //     shape: "sphere",
-        //     position: (-1.5, -1.0, 0.5),
+        //     (-1.5, -1.0, 0.5),
         //     radius: Some(1.0),
         //     material: "glass"
         // ),
         (
             name: Some("room"),
-            shape: "axis_box",
-            position: (0.0, 0.0, -10.0),
-            size: Some((-11.0, -11.0, -40.0)),
+            shape: AxisBox(
+                (0.0, 0.0, -10.0),
+                Some((-11.0, -11.0, -40.0)),
+            ),
             material: "black"
         ),
         (
             name: Some("ceil"),
-            shape: "axis_box",
-            position: (0.0, 5.0, 0.0),
-            size: Some((10.0, 0.01, 10.0)),
+            shape: AxisBox(
+                (0.0, 5.0, 0.0),
+                Some((10.0, 0.01, 10.0)),
+            ),
             material: "diffuse"
         ),
         (
             name: Some("floor"),
-            shape: "axis_box",
-            position: (0.0, -5.0, 0.0),
-            size: Some((10.0, 0.01, 10.0)),
+            shape:AxisBox(
+                (0.0, -5.0, 0.0),
+                Some((10.0, 0.01, 10.0)),
+            ),
             material: "diffuse"
         ),
         (
             name: Some("left_wall"),
-            shape: "axis_box",
-            position: (5.0, 0.0, 0.0),
-            size: Some((0.01, 10.0, 10.0)),
+            shape: AxisBox(
+                (5.0, 0.0, 0.0),
+                Some((0.01, 10.0, 10.0)),
+            ),
             material: "green_diffuse"
         ),
         (
             name: Some("right_wall"),
-            shape: "axis_box",
-            position: (-5.0, 0.0, 0.0),
-            size: Some((0.01, 10.0, 10.0)),
+            shape: AxisBox(
+                (-5.0, 0.0, 0.0),
+                Some((0.01, 10.0, 10.0)),
+            ),
             material: "red_diffuse"
         ),
         (
             name: Some("back_wall"),
-            shape: "axis_box",
-            position: (0.0, 0.0, 5.0),
-            size: Some((10.0, 10.0, 0.01)),
+            shape: AxisBox(
+                (0.0, 0.0, 5.0),
+                Some((10.0, 10.0, 0.01)),
+            ),
             material: "diffuse"
         ),
-        // (
-        //     name: Some("front_wall"),
-        //     shape: "axis_box",
-        //     position: (0.0, 0.0, -5.25),
-        //     size: Some((6.0, 6.0, 0.5)),
-        //     material: "black"
-        // ),
         (
             name: Some("light"),
-            shape: "axis_box",
-            position: (0.0, 4.99, 0.5),
-            size: Some((2.8, 0.01, 2.8)),
+            shape: AxisBox(
+                (0.0, 4.99, 0.5),
+                Some((2.8, 0.01, 2.8)),
+            ),
             material: "light"
-        ),
-        // (
-        //     name: Some("light"),
-        //     shape: "sphere",
-        //     position: (0.0, 52.985, 1.0),
-        //     radius: Some(50.0),
-        //     material: "light"
-        // ),
+        )
     ],
 )

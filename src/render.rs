@@ -190,7 +190,7 @@ impl Renderer {
             .chunks((self.width * self.height) / 64)
             .flat_map(|chunk| {
                 let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
-                let sample_vec = (0..(chunk.len() as usize))
+                let sample_vec = (0..chunk.len())
                     .map(|_| qrng.gen())
                     .collect::<Vec<(f32, f32)>>();
                 let mut offset = fastrand::usize(0..sample_vec.len());
