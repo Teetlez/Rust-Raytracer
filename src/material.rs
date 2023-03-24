@@ -45,9 +45,10 @@ impl Glossy {
             ((-ray.dir).dot(hit.normal)).min(1.0),
             1.00028 / (1.0 + self.reflectance),
         );
-        let (color, out_dir) = if (if fastrand::bool() { r1 } else { r2 }) < reflection_prob {
+        let p = if fastrand::bool() { r1 } else { r2 };
+        let (color, out_dir) = if p < reflection_prob {
             (
-                Vec3::one() * 0.9,
+                ((Vec3::one() * 0.9) * reflection_prob) + ((1.0 - reflection_prob) * self.albedo),
                 ray.dir.reflected(hit.normal) + (self.roughness * random_in_unit_sphere()),
             )
         } else {

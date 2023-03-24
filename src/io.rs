@@ -1,13 +1,14 @@
 use png::ColorType::Rgb;
 use png::Encoder;
 use serde::{self, Deserialize, Serialize};
+use std::f32::consts::PI;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read};
 use std::path::Path;
 use std::sync::Arc;
 use ultraviolet::Vec3;
 
-use crate::hittable::{ABox, Bvh, Cube, Hittable, Sphere, Triangle};
+use crate::hittable::{ABox, Bvh, Cube, Hittable, Mesh, Sphere, Triangle};
 use crate::material::Material;
 use crate::render::Renderer;
 use crate::{camera, Args};
@@ -45,11 +46,12 @@ enum Shape {
         (f32, f32, f32),         // position
         Option<(f32, f32, f32)>, // size
     ),
-    Model(
+    Mesh(
         String,                  // file path
         Option<(f32, f32, f32)>, // translation
         Option<(f32, f32, f32)>, // scale
         Option<(f32, f32, f32)>, // rotation
+        bool,                    // cull backface
     ),
 }
 
@@ -136,7 +138,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                         Vec3::from(vertices.2),
                     ],
                     true,
-                    material,
+                    Arc::new(material),
                 )));
             }
             Shape::Box(position, size, rotation) => world.push(Arc::new(Cube::new(
@@ -152,8 +154,29 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                     material,
                 )));
             }
-            Shape::Model(_location, _translation, _size, _rotation) => {
-                todo!("Model loading not yet implemented")
+            Shape::Mesh(location, translation, scale, rotation, cull_backface) => {
+                let (models, _) = tobj::load_obj(
+                    location,
+                    &tobj::LoadOptions {
+                        single_index: true,
+                        triangulate: true,
+                        ignore_points: false,
+                        ignore_lines: false,
+                    },
+                )
+                .expect("failed to load file");
+                let mut meshes: Vec<Arc<dyn Hittable + Send + Sync>> = Vec::new();
+                models.iter().for_each(|model| {
+                    meshes.push(Arc::new(Mesh::new(
+                        &model.mesh,
+                        Vec3::from(translation.unwrap_or((0.0, 0.0, 0.0))),
+                        Vec3::from(scale.unwrap_or((1.0, 1.0, 1.0))),
+                        Vec3::from(rotation.unwrap_or((0.0, 0.0, 0.0))) * (PI / 2.0),
+                        cull_backface,
+                        material,
+                    )));
+                });
+                world.append(&mut meshes);
             }
         }
     });

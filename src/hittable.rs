@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, sync::Arc};
+use std::{cmp::Ordering, f32::consts::PI, ops::Mul, sync::Arc};
 
 use crate::{material::Material, ray::Ray};
 
@@ -88,22 +88,22 @@ impl Hittable for Sphere {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Triangle {
     pub vertices: [Vec3; 3],
     pub normal: Vec3,
-    pub material: Material,
+    pub material: Arc<Material>,
     two_sided: bool,
 }
 
 impl Triangle {
-    pub fn new(verticies: [Vec3; 3], two_sided: bool, material: Material) -> Triangle {
+    pub fn new(verticies: [Vec3; 3], two_sided: bool, material: Arc<Material>) -> Triangle {
         Triangle {
             vertices: verticies,
             normal: (verticies[1] - verticies[0])
                 .cross(verticies[2] - verticies[0])
                 .normalized(),
-            material,
+            material: material.clone(),
             two_sided,
         }
     }
@@ -155,7 +155,7 @@ impl Hittable for Triangle {
                 t,
                 point: ray.at(t),
                 normal,
-                material: (Arc::new(self.material)),
+                material: self.material.clone(),
             })
         } else {
             None
@@ -187,6 +187,73 @@ impl Hittable for Triangle {
                     .max(self.vertices[1].z.max(self.vertices[2].z)),
             ),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct Mesh {
+    pub bvh: Bvh,
+    pub material: Arc<Material>,
+    pub cull_backface: bool,
+}
+
+impl Mesh {
+    pub fn new(
+        polygons: &tobj::Mesh,
+        translation: Vec3,
+        scale: Vec3,
+        rotation: Vec3,
+        cull_backface: bool,
+        material: Material,
+    ) -> Mesh {
+        let mut mesh: Vec<Arc<dyn Hittable + Send + Sync>> = Vec::new();
+        let mat_ref = Arc::new(material);
+        let rot = Rotor3::from_euler_angles(rotation.z, rotation.x, rotation.y).normalized();
+        polygons.indices.chunks_exact(3).for_each(|face| {
+            let vertices: [Vec3; 3] = [
+                Vec3::new(
+                    polygons.positions[(3 * face[0] as usize)],
+                    polygons.positions[(3 * face[0] as usize) + 1],
+                    polygons.positions[(3 * face[0] as usize) + 2],
+                ),
+                Vec3::new(
+                    polygons.positions[(3 * face[1] as usize)],
+                    polygons.positions[(3 * face[1] as usize) + 1],
+                    polygons.positions[(3 * face[1] as usize) + 2],
+                ),
+                Vec3::new(
+                    polygons.positions[(3 * face[2] as usize)],
+                    polygons.positions[(3 * face[2] as usize) + 1],
+                    polygons.positions[(3 * face[2] as usize) + 2],
+                ),
+            ]
+            .into_iter()
+            .map(|vertex| vertex.mul(scale).rotated_by(rot) + translation)
+            .collect::<Vec<Vec3>>()
+            .try_into()
+            .unwrap();
+
+            mesh.push(Arc::new(Triangle::new(
+                vertices,
+                !cull_backface,
+                mat_ref.clone(),
+            )));
+        });
+        Mesh {
+            bvh: Bvh::new(mesh.as_mut_slice()),
+            material: mat_ref,
+            cull_backface,
+        }
+    }
+}
+
+impl Hittable for Mesh {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        self.bvh.hit(ray, t_min, t_max)
+    }
+
+    fn bounding_box(&self) -> Aabb {
+        *self.bvh.aabb_box
     }
 }
 
@@ -283,7 +350,12 @@ impl Cube {
         Cube {
             axis_box: ABox::new(center, size, mat),
             center: Vec3::from(center),
-            rotation: Rotor3::from_euler_angles(rotation.2, rotation.0, rotation.1).normalized(),
+            rotation: Rotor3::from_euler_angles(
+                rotation.2 * (PI / 2.0),
+                rotation.0 * (PI / 2.0),
+                rotation.1 * (PI / 2.0),
+            )
+            .normalized(),
         }
     }
 }
@@ -383,6 +455,27 @@ impl Aabb {
     #[inline]
     pub fn surrounds_axis(&self, other: Aabb, axis: usize) -> bool {
         self.min[axis] < other.min[axis] && self.max[axis] > other.max[axis]
+    }
+}
+
+enum BvhNode {
+    Branch(Arc<Bvh>),
+    Leaf(Arc<dyn Hittable + Send + Sync>),
+}
+
+impl Hittable for BvhNode {
+    fn bounding_box(&self) -> Aabb {
+        match self {
+            BvhNode::Branch(branch) => branch.bounding_box(),
+            BvhNode::Leaf(leaf) => leaf.bounding_box(),
+        }
+    }
+
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        match self {
+            BvhNode::Branch(branch) => branch.hit(ray, t_min, t_max),
+            BvhNode::Leaf(leaf) => leaf.hit(ray, t_min, t_max),
+        }
     }
 }
 
@@ -493,27 +586,6 @@ impl Bvh {
             Ordering::Greater
         } else {
             Ordering::Equal
-        }
-    }
-}
-
-enum BvhNode {
-    Branch(Arc<Bvh>),
-    Leaf(Arc<dyn Hittable + Send + Sync>),
-}
-
-impl Hittable for BvhNode {
-    fn bounding_box(&self) -> Aabb {
-        match self {
-            BvhNode::Branch(branch) => branch.bounding_box(),
-            BvhNode::Leaf(leaf) => leaf.bounding_box(),
-        }
-    }
-
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        match self {
-            BvhNode::Branch(branch) => branch.hit(ray, t_min, t_max),
-            BvhNode::Leaf(leaf) => leaf.hit(ray, t_min, t_max),
         }
     }
 }
