@@ -8,20 +8,6 @@ Scene(
         apeture: 0.01,
     ),
     materials: {
-        "steel": Metal(
-            (0.7, 0.7, 0.7),
-            Some(0.05),
-        ),
-        "glossy": Glossy(
-            (0.7, 0.7, 0.7),
-            Some(0.05),
-            Some(1.5),
-        ),
-        "glass": Dielectric(
-            (0.6, 0.1, 0.25),
-            Some(1.52),
-            Some(0.0)
-        ),
         "diffuse": Lambertian(
             (0.73, 0.73, 0.73),
         ),
@@ -37,9 +23,6 @@ Scene(
         "green_diffuse": Lambertian(
             (0.12, 0.45, 0.15),
         ),
-        "blue_diffuse": Lambertian(
-            (0.05, 0.1, 0.85),
-        )
     },
     objects: [
         (

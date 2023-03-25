@@ -1,19 +1,9 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+use camera::Camera;
+use clap::Parser;
+use minifb::{Key, Window, WindowOptions};
 
-mod camera;
-mod filter;
-mod hittable;
-mod io;
-mod material;
-mod random;
-mod ray;
-mod render;
-
-extern crate clap;
-extern crate minifb;
-extern crate serde;
-extern crate ultraviolet;
 use std::{
     f32::INFINITY,
     fs::File,
@@ -22,15 +12,26 @@ use std::{
     sync::Arc,
     time::{self, Duration},
 };
-
-use camera::Camera;
-use clap::Parser;
-use minifb::{Key, Window, WindowOptions};
 use ultraviolet::Vec3;
 
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{filter::bilateral_filter, render::Renderer};
+
+pub mod camera;
+pub mod filter;
+pub mod io;
+pub mod material;
+pub mod random;
+pub mod ray;
+pub mod render;
+pub mod tracer;
+
+extern crate clap;
+extern crate minifb;
+extern crate serde;
+extern crate ultraviolet;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -248,58 +249,3 @@ fn main() {
         }
     }
 }
-
-// #[allow(dead_code)]
-// fn _box_scene() -> Bvh {
-//     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
-
-//     let glass = Material::dielectric((0.6, 0.1, 0.25), 1.52);
-//     let steel = Material::metal((0.65, 0.65, 0.65), 0.2, 1.5);
-//     let light = Material::lambertian((12.0, 12.0, 12.0));
-//     let diffuse = Material::lambertian((0.5, 0.5, 0.5));
-//     let diffuse_black = Material::lambertian((0.01, 0.01, 0.01));
-//     let diffuse_red = Material::lambertian((0.9, 0.1, 0.1));
-//     let diffuse_green = Material::lambertian((0.1, 0.9, 0.1));
-//     let diffuse_blue = Material::lambertian((0.1, 0.1, 0.9));
-
-//     world.push(Arc::new(Sphere::new((1.5, -1.0, 2.5), 1.0, steel)));
-//     world.push(Arc::new(Sphere::new((-1.5, -1.0, 0.5), 1.0, glass)));
-//     // world.push(Arc::new( Sphere::new((-1.5, -1.0, 0.5), -0.8, glass)));
-//     world.push(Arc::new(ABox::new(
-//         (0.0, 3.0, 1.5),
-//         (2.5, 0.01, 2.5),
-//         light,
-//     )));
-
-//     // world.push(Arc::new(ABox::new(
-//     //     (0.0, 0.5, -0.4),
-//     //     (-6.0, -5.0, -8.4),
-//     //     diffuse,
-//     // )));
-
-//     world.push(Arc::new(Sphere::new((0.0, 503.0, 0.0), 500.0, diffuse)));
-//     world.push(Arc::new(Sphere::new(
-//         (0.0, -502.0, 0.0),
-//         500.0,
-//         diffuse_green,
-//     )));
-
-//     world.push(Arc::new(Sphere::new(
-//         (503.0, 0.0, 0.0),
-//         500.0,
-//         diffuse_blue,
-//     )));
-//     world.push(Arc::new(Sphere::new(
-//         (-503.0, 0.0, 0.0),
-//         500.0,
-//         diffuse_red,
-//     )));
-
-//     world.push(Arc::new(Sphere::new((0.0, 0.0, 505.0), 500.0, diffuse)));
-//     world.push(Arc::new(Sphere::new(
-//         (0.0, 0.0, -505.0),
-//         500.0,
-//         diffuse_black,
-//     )));
-//     Bvh::new(&mut world)
-// }

@@ -1,5 +1,5 @@
 use crate::{
-    hittable::HitRecord,
+    tracer::hittable::HitRecord,
     random::{quasirandom_on_hemisphere, random_in_unit_sphere},
     ray::Ray,
 };
@@ -35,8 +35,8 @@ impl Lambertian {
 #[derive(Debug, Copy, Clone)]
 pub struct Glossy {
     pub albedo: Vec3,
-    pub roughness: f32,
     pub reflectance: f32,
+    pub roughness: f32,
 }
 
 impl Glossy {
@@ -155,11 +155,11 @@ impl Material {
         })
     }
 
-    pub fn glossy(albedo: (f32, f32, f32), roughness: f32, reflectance: f32) -> Material {
+    pub fn glossy(albedo: (f32, f32, f32), reflectance: f32, roughness: f32) -> Material {
         Material::Glossy(Glossy {
             albedo: Vec3::new(albedo.0, albedo.1, albedo.2),
-            roughness,
             reflectance,
+            roughness,
         })
     }
 

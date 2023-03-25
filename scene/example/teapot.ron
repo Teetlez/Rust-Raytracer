@@ -14,8 +14,8 @@ Scene(
         ),
         "ceramic": Glossy(
             (0.8, 0.8, 0.8),
-            Some(0.01),
             Some(0.95),
+            Some(0.01),
         ),
         "wood": Glossy(
             (0.51, 0.29, 0.14),

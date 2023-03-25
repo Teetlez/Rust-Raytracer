@@ -14,8 +14,8 @@ Scene(
         ),
         "glossy": Glossy(
             (0.7, 0.7, 0.7),  // albedo
-            Some(0.05),       // roughness
             Some(1.5),        // reflectance
+            Some(0.05),       // roughness
         ),
         "glass": Dielectric(
             (0.6, 0.1, 0.25), // absorption

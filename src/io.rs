@@ -1,14 +1,22 @@
-use png::ColorType::Rgb;
-use png::Encoder;
+use png::{ColorType::Rgb, Encoder};
 use serde::{self, Deserialize, Serialize};
-use std::f32::consts::PI;
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Read};
-use std::path::Path;
-use std::sync::Arc;
+use std::{
+    f32::consts::PI,
+    fs::File,
+    io::{BufReader, BufWriter, Read},
+    path::Path,
+    sync::Arc,
+};
 use ultraviolet::Vec3;
 
-use crate::hittable::{ABox, Bvh, Cube, Hittable, Mesh, Sphere, Triangle};
+use crate::tracer::{
+    bvh::Bvh,
+    cube::{ABox, Cube},
+    hittable::Hittable,
+    mesh::Mesh,
+    sphere::Sphere,
+    triangle::Triangle,
+};
 use crate::material::Material;
 use crate::render::Renderer;
 use crate::{camera, Args};
@@ -113,7 +121,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
             Surface::Lambertian(albedo) => Material::lambertian(albedo),
             Surface::Metal(albedo, roughness) => Material::metal(albedo, roughness.unwrap_or(0.0)),
             Surface::Glossy(albedo, roughness, reflectance) => {
-                Material::glossy(albedo, roughness.unwrap_or(0.0), reflectance.unwrap_or(1.0))
+                Material::glossy(albedo, reflectance.unwrap_or(1.0), roughness.unwrap_or(0.0))
             }
             Surface::Dielectric(absorption, refractive_index, roughness) => Material::dielectric(
                 absorption,

@@ -1,11 +1,11 @@
+use crate::tracer::hittable::Hittable;
 use std::f32::consts::PI;
 use std::f32::INFINITY;
 use std::sync::Arc;
 
-use crate::camera::Camera;
-use crate::hittable::{Bvh, Hittable};
 use crate::material::Scatter;
 use crate::ray::Ray;
+use crate::{camera::Camera, tracer::bvh::Bvh};
 use quasirandom::Qrng;
 use radiant::Image;
 use rayon::prelude::*;
