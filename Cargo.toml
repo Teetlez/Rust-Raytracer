@@ -6,16 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mimalloc = { version = "0.1.17", default-features = false }
+mimalloc = { version = "0.1.34", default-features = false }
 minifb = "0.24"
 quasirandom = "0.3.0"
-fastrand = "1.8.0"
-rayon = "1.6.1"
-ultraviolet = "0.9.0"
+fastrand = "1.9.0"
+rayon = "1.7.0"
+ultraviolet = "0.9.1"
 radiant = "0.3.0"
-clap = { version = "4.1.6", features = ["derive"] }
+clap = { version = "4.1.13", features = ["derive"] }
 png = "0.17.7"
-serde = {version = "1.0.152", features = ["derive"]}
+serde = {version = "1.0.158", features = ["derive"]}
 ron = "0.8.0"
 tobj = "3.2.4"
 
