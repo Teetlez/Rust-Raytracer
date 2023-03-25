@@ -15,12 +15,12 @@ Small, personal pathtracer project written in rust.
 - HDR environment lighting
 - ACES tonemapping
 - BVH scene optimization
-  
+
 ## Planned Features
 
 - [ ] Camera movement
 - [ ] Volumes
-- [ ] Mesh smooth shading
+- [X] Mesh smooth shading
 - [ ] Cylinder object
 - [ ] Planars
 - [ ] BSDF

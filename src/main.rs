@@ -51,11 +51,11 @@ pub struct Args {
     bounces: u32,
 
     /// Pixel width of frame
-    #[arg(long, default_value_t = 640)]
+    #[arg(long, default_value_t = 600)]
     width: usize,
 
     /// Pixel hight of frame
-    #[arg(long, default_value_t = 480)]
+    #[arg(long, default_value_t = 400)]
     height: usize,
 
     /// Gamma level

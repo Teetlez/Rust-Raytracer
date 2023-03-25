@@ -12,18 +12,21 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Triangle {
     pub vertices: [Vec3; 3],
-    pub normal: Vec3,
+    pub normals: [Vec3; 3],
     pub material: Arc<Material>,
     two_sided: bool,
 }
 
 impl Triangle {
-    pub fn new(verticies: [Vec3; 3], two_sided: bool, material: Arc<Material>) -> Triangle {
+    pub fn new(
+        vertices: [Vec3; 3],
+        normals: [Vec3; 3],
+        two_sided: bool,
+        material: Arc<Material>,
+    ) -> Triangle {
         Triangle {
-            vertices: verticies,
-            normal: (verticies[1] - verticies[0])
-                .cross(verticies[2] - verticies[0])
-                .normalized(),
+            vertices,
+            normals,
             material,
             two_sided,
         }
@@ -32,55 +35,49 @@ impl Triangle {
 
 impl Hittable for Triangle {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        if self.two_sided || ray.dir.dot(self.normal) < 0.0 {
-            let edge1 = self.vertices[1] - self.vertices[0];
-            let edge2 = self.vertices[2] - self.vertices[0];
-            let h = ray.dir.cross(edge2);
-            let a = edge1.dot(h);
+        let edge1 = self.vertices[1] - self.vertices[0];
+        let edge2 = self.vertices[2] - self.vertices[0];
+        let h = ray.dir.cross(edge2);
+        let a = edge1.dot(h);
 
-            if (-1e-6..=1e-6).contains(&a) {
-                return None;
-            }
-
-            let f = 1.0 / a;
-            let s = ray.pos - self.vertices[0];
-            let u = f * s.dot(h);
-
-            if !(0.0..=1.0).contains(&u) {
-                return None;
-            }
-
-            let q = s.cross(edge1);
-            let v = f * ray.dir.dot(q);
-
-            if v < 0.0 || u + v > 1.0 {
-                return None;
-            }
-
-            let t = f * edge2.dot(q);
-
-            if !(t_min..=t_max).contains(&t) {
-                return None;
-            }
-
-            let mut normal = self.normal;
-
-            if self.two_sided && ray.dir.dot(normal) > 0.0 {
-                normal = -normal;
-            }
-
-            let front_face = ray.dir.dot(normal) < 0.0;
-            let normal = if front_face { normal } else { -normal };
-
-            Some(HitRecord {
-                t,
-                point: ray.at(t),
-                normal,
-                material: self.material.clone(),
-            })
-        } else {
-            None
+        if a.abs() < 1e-6 {
+            return None;
         }
+
+        let f = a.recip();
+        let s = ray.pos - self.vertices[0];
+        let u = f * s.dot(h);
+
+        if !(0.0..=1.0).contains(&u) {
+            return None;
+        }
+
+        let q = s.cross(edge1);
+        let v = f * ray.dir.dot(q);
+
+        if v < 0.0 || u + v > 1.0 {
+            return None;
+        }
+
+        let t = f * edge2.dot(q);
+
+        if t < t_min || t > t_max {
+            return None;
+        }
+
+        let normal = if self.two_sided && a < 0.0 {
+            (self.normals[0] + self.normals[1] + self.normals[2]).normalized()
+        } else {
+            ((1.0 - (u + v)) * self.normals[0] + u * self.normals[1] + v * self.normals[2])
+                .normalized()
+        };
+
+        Some(HitRecord {
+            t,
+            point: ray.at(t),
+            normal,
+            material: self.material.clone(),
+        })
     }
 
     fn bounding_box(&self) -> Aabb {

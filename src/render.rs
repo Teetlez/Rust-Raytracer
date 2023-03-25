@@ -117,6 +117,15 @@ fn color_only(ray: Ray, world: Arc<Bvh>, image: Arc<Option<Image>>) -> Vec3 {
 }
 
 #[inline]
+fn _normals_only(ray: Ray, world: Arc<Bvh>, image: Arc<Option<Image>>) -> Vec3 {
+    if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
+        (hit.normal + Vec3::one()) * 0.5
+    } else {
+        get_sky(ray, image, INFINITY)
+    }
+}
+
+#[inline]
 fn get_sky(ray: Ray, image: Arc<Option<Image>>, light_clamp: f32) -> Vec3 {
     if let Some(color) = get_pixel_from_vec(ray.dir, image) {
         Vec3::new(color[0], color[1], color[2]).clamped(Vec3::zero(), Vec3::one() * light_clamp)

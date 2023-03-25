@@ -9,6 +9,8 @@ use std::{
 };
 use ultraviolet::Vec3;
 
+use crate::material::Material;
+use crate::render::Renderer;
 use crate::tracer::{
     bvh::Bvh,
     cube::{ABox, Cube},
@@ -17,8 +19,6 @@ use crate::tracer::{
     sphere::Sphere,
     triangle::Triangle,
 };
-use crate::material::Material;
-use crate::render::Renderer;
 use crate::{camera, Args};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -120,7 +120,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
         let material = match *scene.materials.get(&obj.material).unwrap() {
             Surface::Lambertian(albedo) => Material::lambertian(albedo),
             Surface::Metal(albedo, roughness) => Material::metal(albedo, roughness.unwrap_or(0.0)),
-            Surface::Glossy(albedo, roughness, reflectance) => {
+            Surface::Glossy(albedo, reflectance, roughness) => {
                 Material::glossy(albedo, reflectance.unwrap_or(1.0), roughness.unwrap_or(0.0))
             }
             Surface::Dielectric(absorption, refractive_index, roughness) => Material::dielectric(
@@ -139,12 +139,15 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                 )));
             }
             Shape::Triangle(vertices) => {
+                let vertices = [
+                    Vec3::from(vertices.0),
+                    Vec3::from(vertices.1),
+                    Vec3::from(vertices.2),
+                ];
+                let normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[0]);
                 world.push(Arc::new(Triangle::new(
-                    [
-                        Vec3::from(vertices.0),
-                        Vec3::from(vertices.1),
-                        Vec3::from(vertices.2),
-                    ],
+                    vertices,
+                    [normal; 3],
                     true,
                     Arc::new(material),
                 )));
