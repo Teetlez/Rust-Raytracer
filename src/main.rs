@@ -94,7 +94,7 @@ fn main() {
     } else {
         // Load HDR
         let image = if let Ok(f) =
-            File::open(r"C:\Git_Projects\Rust-Raytracer\scene\HDR\kloetzle_lei_2k.hdr")
+            File::open(r"C:\Git_Projects\Rust-Raytracer\scene\HDR\lythwood_room_2k.hdr")
         {
             let reader = BufReader::new(f);
             Arc::new(radiant::load(reader).ok())

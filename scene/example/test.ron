@@ -1,0 +1,93 @@
+Scene(
+    hdr: Some("C:\\Git_Projects\\Rust-Raytracer\\scene\\HDR\\lythwood_room_2k.hdr"),
+    camera: (
+        position: (0.0, 0.5, -5.0),
+        lookat: (0.0, 1.0, 0.0),
+        fov: 50.0,
+        focus_dist: 5.0,
+        apeture: 0.1,
+    ),
+    materials: {
+        "stainless steel": Metal(
+            (0.58, 0.56, 0.57),
+            Some(0.2),
+        ),
+        "glossy": Glossy(
+            (0.85, 0.82, 0.77),
+            Some(0.95),
+            Some(0.2),
+        ),
+        "glossy_yellow": Glossy(
+            (0.85, 0.82, 0.18),
+            Some(0.95),
+            Some(0.2),
+        ),
+        "glossy_pink": Glossy(
+            (0.85, 0.18, 0.77),
+            Some(0.95),
+            Some(0.2),
+        ),
+        "wood": Glossy(
+            (0.51, 0.29, 0.14),
+            Some(0.6),
+            Some(0.4),
+        ),
+        "glass": Dielectric(
+            (0.9, 0.2, 0.1),
+            Some(1.52),
+            Some(1.1),
+        ),
+        "diffuse": Lambertian(
+            (0.85, 0.82, 0.77),
+        ),
+        "light": Lambertian(
+            (10.0, 9.0, 7.0),
+        ),
+        "black": Lambertian(
+            (0.05, 0.05, 0.05),
+        ),
+    },
+    objects: [
+        (
+            name: Some("table"),
+            shape: AxisBox(
+                (0.0, -0.004, 0.0),
+                Some((10.0, 0.01, 10.0)),
+            ),
+            material: "wood",
+        ),
+        (
+            name: Some("sphere1"),
+            shape: Sphere(
+                (0.0, 1.0, 0.0),
+                Some(1.0),
+            ),
+            material: "glossy_pink",
+        ),
+        (
+            name: Some("sphere2"),
+            shape: Sphere(
+                (-2.0, 1.0, 0.0),
+                Some(1.0),
+            ),
+            material: "stainless steel",
+        ),
+        (
+            name: Some("sphere3"),
+            shape: Sphere(
+                (2.0, 1.0, 0.0),
+                Some(1.0),
+            ),
+            material: "glass",
+        ),
+        // (
+        //     name: Some("lamp"),
+        //     shape: Sphere(
+        //         (2.0, 5.0, 2.0),
+        //         Some(1.5),
+        //     ),
+        //     material: "light",
+        // ),
+
+    ],
+)

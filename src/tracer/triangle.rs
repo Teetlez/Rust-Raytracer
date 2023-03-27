@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use crate::{material::Material, ray::Ray};
 
@@ -40,7 +40,7 @@ impl Hittable for Triangle {
         let h = ray.dir.cross(edge2);
         let a = edge1.dot(h);
 
-        if a.abs() < 1e-6 {
+        if (!self.two_sided && a.is_sign_negative()) || a.abs() < 1e-6 {
             return None;
         }
 
@@ -65,18 +65,15 @@ impl Hittable for Triangle {
             return None;
         }
 
-        let normal = if self.two_sided && a < 0.0 {
-            (self.normals[0] + self.normals[1] + self.normals[2]).normalized()
-        } else {
+        let normal =
             ((1.0 - (u + v)) * self.normals[0] + u * self.normals[1] + v * self.normals[2])
-                .normalized()
-        };
+                .normalized();
 
         Some(HitRecord {
             t,
             point: ray.at(t),
             normal,
-            material: self.material.clone(),
+            material: &Rc::new(self.material.as_ref()),
         })
     }
 

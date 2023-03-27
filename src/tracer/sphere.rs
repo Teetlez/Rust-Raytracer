@@ -38,7 +38,7 @@ impl Hittable for Sphere {
                     temp,
                     hit_point,
                     ((1.0 / self.center.w) * (hit_point - self.center.truncated())).normalized(),
-                    self.material,
+                    &self.material,
                 ));
             }
 
@@ -49,7 +49,7 @@ impl Hittable for Sphere {
                     temp,
                     hit_point,
                     ((1.0 / self.center.w) * (hit_point - self.center.truncated())).normalized(),
-                    self.material,
+                    &self.material,
                 ));
             }
         }

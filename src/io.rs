@@ -182,7 +182,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                         &model.mesh,
                         Vec3::from(translation.unwrap_or((0.0, 0.0, 0.0))),
                         Vec3::from(scale.unwrap_or((1.0, 1.0, 1.0))),
-                        Vec3::from(rotation.unwrap_or((0.0, 0.0, 0.0))) * (PI / 2.0),
+                        Vec3::from(rotation.unwrap_or((0.0, 0.0, 0.0))) * PI,
                         cull_backface,
                         material,
                     )));
@@ -244,7 +244,7 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
                         world.push(Arc::new(Sphere::new(
                             center,
                             0.2,
-                            Material::glossy(albedo, fastrand::f32(), fastrand::f32() + 0.2),
+                            Material::glossy(albedo, fastrand::f32() + 0.5, fastrand::f32() * 0.5),
                         )));
                     } else if diffuse && choose_mat < 0.6 {
                         // diffuse
@@ -289,9 +289,9 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
         }
     }
 
-    let glass = Material::dielectric((0.1, 0.1, 0.1), 1.52, 0.0);
-    let gloss = Material::glossy((0.3, 0.2, 0.15), 0.2, 0.28);
-    let steel = Material::metal((0.7, 0.5, 0.3), 0.001);
+    let glass = Material::dielectric((0.1, 0.1, 0.1), 1.52, 0.025);
+    let gloss = Material::glossy((0.3, 0.2, 0.15), 0.6, 0.3);
+    let steel = Material::metal((0.7, 0.5, 0.3), 0.025);
     // let diffuse = Material::lambertian((0.4, 0.2, 0.1));
 
     world.push(Arc::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));

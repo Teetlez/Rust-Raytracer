@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{material::Material, ray::Ray};
 
 use ultraviolet::Vec3;
@@ -13,20 +11,20 @@ pub trait Hittable {
 }
 
 #[derive(Clone)]
-pub struct HitRecord {
+pub struct HitRecord<'a> {
     pub t: f32,
     pub point: Vec3,
     pub normal: Vec3,
-    pub material: Arc<Material>,
+    pub material: &'a Material,
 }
 
-impl HitRecord {
-    pub fn new(t: f32, point: Vec3, normal: Vec3, material: Material) -> HitRecord {
+impl HitRecord<'_> {
+    pub fn new(t: f32, point: Vec3, normal: Vec3, material: &Material) -> HitRecord {
         HitRecord {
             t,
             point,
             normal,
-            material: (Arc::new(material)),
+            material,
         }
     }
 }

@@ -68,7 +68,7 @@ impl Hittable for ABox {
                     n
                 }
             };
-            Some(HitRecord::new(t, p, normal.normalized(), self.material))
+            Some(HitRecord::new(t, p, normal.normalized(), &self.material))
         } else {
             None
         }
@@ -99,12 +99,8 @@ impl Cube {
         Cube {
             axis_box: ABox::new(center, size, mat),
             center: Vec3::from(center),
-            rotation: Rotor3::from_euler_angles(
-                rotation.2 * (PI / 2.0),
-                rotation.0 * (PI / 2.0),
-                rotation.1 * (PI / 2.0),
-            )
-            .normalized(),
+            rotation: Rotor3::from_euler_angles(rotation.2 * PI, rotation.0 * PI, rotation.1 * PI)
+                .normalized(),
         }
     }
 }
