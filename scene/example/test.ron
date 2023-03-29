@@ -1,5 +1,5 @@
 Scene(
-    hdr: Some("C:\\Git_Projects\\Rust-Raytracer\\scene\\HDR\\lythwood_room_2k.hdr"),
+    hdr: Some(".\\scene\\HDR\\lythwood_room.hdr"),
     camera: (
         position: (0.0, 0.5, -5.0),
         lookat: (0.0, 1.0, 0.0),

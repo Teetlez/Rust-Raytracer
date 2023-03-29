@@ -14,6 +14,8 @@ pub struct ABox {
     pub material: Material,
 }
 
+const TOLERANCE: f32 = 0.0001;
+
 impl ABox {
     pub fn new(center: (f32, f32, f32), size: (f32, f32, f32), mat: Material) -> ABox {
         let hollow = size.0.min(size.1).min(size.2) < 0.0;
@@ -53,22 +55,17 @@ impl Hittable for ABox {
                 return None;
             };
             let p = ray.at(t);
-            let normal = {
-                let mut n = Vec3::zero();
-                (0..3).for_each(|a| {
-                    if (p[a] - self.min[a]).abs() < 0.0001 {
-                        n[a] = -1.0;
-                    } else if (p[a] - self.max[a]).abs() < 0.0001 {
-                        n[a] = 1.0;
-                    }
-                });
-                if self.hollow {
-                    -n
-                } else {
-                    n
-                }
-            };
-            Some(HitRecord::new(t, p, normal.normalized(), &self.material))
+            let normal = match p {
+                Vec3 { x, .. } if (x - self.max.x).abs() < TOLERANCE => Vec3::unit_x(),
+                Vec3 { y, .. } if (y - self.max.y).abs() < TOLERANCE => Vec3::unit_y(),
+                Vec3 { z, .. } if (z - self.max.z).abs() < TOLERANCE => Vec3::unit_z(),
+                Vec3 { x, .. } if (x - self.min.x).abs() < TOLERANCE => -Vec3::unit_x(),
+                Vec3 { y, .. } if (y - self.min.y).abs() < TOLERANCE => -Vec3::unit_y(),
+                Vec3 { z, .. } if (z - self.min.z).abs() < TOLERANCE => -Vec3::unit_z(),
+                _ => Vec3::zero(),
+            } * if self.hollow { -1.0 } else { 1.0 };
+
+            Some(HitRecord::new(t, p, normal, &self.material))
         } else {
             None
         }
@@ -110,7 +107,9 @@ impl Hittable for Cube {
         let rot_pos = (ray.pos - self.center).rotated_by(self.rotation.reversed()) + self.center;
         let rot_dir = ray.dir.rotated_by(self.rotation.reversed());
 
-        self.axis_box.hit(&Ray::new(rot_pos, rot_dir), t_min, t_max).map(|hit| HitRecord {
+        self.axis_box
+            .hit(&Ray::new(rot_pos, rot_dir), t_min, t_max)
+            .map(|hit| HitRecord {
                 t: hit.t,
                 point: ray.at(hit.t),
                 normal: hit.normal.rotated_by(self.rotation),
