@@ -32,10 +32,10 @@ Scene(
             Some(0.6),
             Some(0.4),
         ),
-        "glass": Dielectric(
-            (0.9, 0.2, 0.1),
+        "glossy_teal": Glossy(
+            (0.14, 0.82, 0.93),
             Some(1.52),
-            Some(1.1),
+            Some(0.2),
         ),
         "diffuse": Lambertian(
             (0.85, 0.82, 0.77),
@@ -70,7 +70,7 @@ Scene(
                 (-2.0, 1.0, 0.0),
                 Some(1.0),
             ),
-            material: "stainless steel",
+            material: "glossy_yellow",
         ),
         (
             name: Some("sphere3"),
@@ -78,7 +78,7 @@ Scene(
                 (2.0, 1.0, 0.0),
                 Some(1.0),
             ),
-            material: "glass",
+            material: "glossy_teal",
         ),
         // (
         //     name: Some("lamp"),

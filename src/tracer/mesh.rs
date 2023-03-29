@@ -14,7 +14,7 @@ use super::{
 #[derive(Clone)]
 pub struct Mesh {
     pub bvh: Bvh,
-    pub material: Arc<Material>,
+    pub material: Material,
     pub cull_backface: bool,
 }
 
@@ -28,7 +28,6 @@ impl Mesh {
         material: Material,
     ) -> Mesh {
         let mut mesh: Vec<Arc<dyn Hittable + Send + Sync>> = Vec::new();
-        let mat_ref = Arc::new(material);
         let rot = Rotor3::from_euler_angles(rotation.z, rotation.x, rotation.y).normalized();
         polygons.indices.chunks_exact(3).for_each(|face| {
             let vertices: [Vec3; 3] = [
@@ -77,12 +76,12 @@ impl Mesh {
                 vertices,
                 normals,
                 !cull_backface,
-                mat_ref.clone(),
+                material,
             )));
         });
         Mesh {
             bvh: Bvh::new(mesh.as_mut_slice()),
-            material: mat_ref,
+            material,
             cull_backface,
         }
     }

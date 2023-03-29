@@ -149,7 +149,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                     vertices,
                     [normal; 3],
                     true,
-                    Arc::new(material),
+                    material,
                 )));
             }
             Shape::Box(position, size, rotation) => world.push(Arc::new(Cube::new(
@@ -171,8 +171,8 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                     &tobj::LoadOptions {
                         single_index: true,
                         triangulate: true,
-                        ignore_points: false,
-                        ignore_lines: false,
+                        ignore_points: true,
+                        ignore_lines: true,
                     },
                 )
                 .expect("failed to load file");
@@ -216,7 +216,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
 
 pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glass: bool) -> Bvh {
     let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
-    let ground: Material = Material::lambertian((0.5, 0.5, 0.5));
+    let ground: Material = Material::glossy((0.55, 0.53, 0.56), 0.1, 0.7);
     world.push(Arc::new(ABox::new(
         (-2.0, -0.5, -2.0),
         (50.0, 1.0, 50.0),

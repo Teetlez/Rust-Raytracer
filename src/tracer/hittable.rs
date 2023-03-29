@@ -10,7 +10,7 @@ pub trait Hittable {
     fn bounding_box(&self) -> Aabb;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct HitRecord<'a> {
     pub t: f32,
     pub point: Vec3,

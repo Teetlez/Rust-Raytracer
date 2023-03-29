@@ -48,13 +48,7 @@ fn aces_tonemap(color: &Vec3, gamma: f32) -> Vec3 {
 }
 
 #[inline]
-fn ray_color(
-    ray: Ray,
-    world: Rc<&Bvh>,
-    depth: u32,
-    image: Rc<&Option<Image>>,
-    light_clamp: f32,
-) -> Vec3 {
+fn ray_color(ray: Ray, world: &Bvh, depth: u32, image: &Option<Image>, light_clamp: f32) -> Vec3 {
     let mut color_total = Vec3::one();
     let mut temp_ray = ray;
     for _ in 0..depth {
@@ -83,7 +77,7 @@ fn ray_color(
 }
 
 #[inline]
-fn get_pixel_from_vec(dir: Vec3, image: Rc<&Option<Image>>) -> Option<Vec3> {
+fn get_pixel_from_vec(dir: Vec3, image: &Option<Image>) -> Option<Vec3> {
     if let Some(img) = image.as_ref() {
         let u = (dir.x.atan2(dir.z) + PI) / (2.0 * PI);
         let v = (-dir.y).acos() / PI;
@@ -103,7 +97,7 @@ fn get_pixel_from_vec(dir: Vec3, image: Rc<&Option<Image>>) -> Option<Vec3> {
 }
 
 #[inline]
-fn color_only(ray: Ray, world: Rc<&Bvh>, image: Rc<&Option<Image>>) -> Vec3 {
+fn color_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
         (Vec3::new(1.0, 1.0, -0.5))
             .normalized()
@@ -119,7 +113,7 @@ fn color_only(ray: Ray, world: Rc<&Bvh>, image: Rc<&Option<Image>>) -> Vec3 {
 }
 
 #[inline]
-fn _normals_only(ray: Ray, world: Rc<&Bvh>, image: Rc<&Option<Image>>) -> Vec3 {
+fn _normals_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
         (hit.normal + Vec3::one()) * 0.5
     } else {
@@ -128,7 +122,7 @@ fn _normals_only(ray: Ray, world: Rc<&Bvh>, image: Rc<&Option<Image>>) -> Vec3 {
 }
 
 #[inline]
-fn get_sky(ray: Ray, image: Rc<&Option<Image>>, light_clamp: f32) -> Vec3 {
+fn get_sky(ray: Ray, image: &Option<Image>, light_clamp: f32) -> Vec3 {
     if let Some(color) = get_pixel_from_vec(ray.dir, image) {
         Vec3::new(color[0], color[1], color[2]).clamped(Vec3::zero(), Vec3::one() * light_clamp)
     } else {
@@ -154,8 +148,8 @@ impl Renderer {
             .into_par_iter()
             .chunks((self.width * self.height) / CHUNK_NUM)
             .flat_map(|chunk| {
-                let hdr = Rc::new(self.hdr.as_ref());
-                let world_bvh = Rc::new(self.world.as_ref());
+                let hdr = self.hdr.as_ref();
+                let world_bvh = self.world.as_ref();
                 let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
                 let sample_vec = (0..(chunk.len() * self.sample_rate as usize))
                     .map(|_| qrng.gen())
@@ -173,9 +167,9 @@ impl Renderer {
 
                             pixel_color += ray_color(
                                 self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                world_bvh.clone(),
+                                world_bvh,
                                 self.max_bounce,
-                                hdr.clone(),
+                                hdr,
                                 self.light_clamp,
                             );
                             if !pixel_color.x.is_finite() {
@@ -222,8 +216,8 @@ impl Renderer {
                                 jx,
                                 jy,
                             ),
-                            world_bvh.clone(),
-                            hdr.clone(),
+                            &world_bvh,
+                            &hdr,
                         )
                     })
                     .collect::<Vec<Vec3>>()

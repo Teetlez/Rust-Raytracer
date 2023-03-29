@@ -110,16 +110,12 @@ impl Hittable for Cube {
         let rot_pos = (ray.pos - self.center).rotated_by(self.rotation.reversed()) + self.center;
         let rot_dir = ray.dir.rotated_by(self.rotation.reversed());
 
-        if let Some(hit) = self.axis_box.hit(&Ray::new(rot_pos, rot_dir), t_min, t_max) {
-            Some(HitRecord {
+        self.axis_box.hit(&Ray::new(rot_pos, rot_dir), t_min, t_max).map(|hit| HitRecord {
                 t: hit.t,
                 point: ray.at(hit.t),
                 normal: hit.normal.rotated_by(self.rotation),
                 material: hit.material,
             })
-        } else {
-            None
-        }
     }
 
     fn bounding_box(&self) -> Aabb {

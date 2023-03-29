@@ -145,56 +145,20 @@ impl Hittable for Bvh {
             .aabb_box
             .hit(ray.pos, ray.dir.map(|k| k.recip()), t_min, t_max)
         {
-            if let Some(child_left) = self.left.as_ref() {
-                return if let Some(child_right) = self.right.as_ref() {
-                    if let Some(left) = child_left.hit(ray, t_min, t_max) {
-                        if let Some(right) = child_right.hit(ray, t_min, left.t) {
-                            Some(right)
-                        } else {
-                            Some(left)
-                        }
-                    } else {
-                        child_right.hit(ray, t_min, t_max)
-                    }
-                } else {
-                    child_left.hit(ray, t_min, t_max)
-                };
-            }
+            let right_hit = self
+                .right
+                .as_ref()
+                .and_then(|child_right| child_right.hit(ray, t_min, t_max));
+
+            let left_hit = self.left.as_ref().and_then(|child_left| {
+                child_left.hit(ray, t_min, right_hit.map_or(t_max, |hit| hit.t))
+            });
+
+            left_hit.or(right_hit)
+        } else {
+            None
         }
-        None
     }
-    // fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-    //     let mut stack = vec![BvhNode::Branch(Arc::new(self.clone()))];
-
-    //     let mut closest_hit: Option<HitRecord> = None;
-    //     let mut closest_t = t_max;
-
-    //     let inv_d = ray.dir.map(|k| k.recip());
-
-    //     while let Some(node) = stack.pop() {
-    //         match node {
-    //             BvhNode::Branch(bvh) => {
-    //                 if bvh.aabb_box.hit(ray.pos, inv_d, t_min, t_max) {
-    //                     if let Some(left_child) = &bvh.left {
-    //                         stack.push(BvhNode::Leaf(left_child.clone()));
-    //                     }
-    //                     if let Some(right_child) = &bvh.right {
-    //                         stack.push(BvhNode::Leaf(right_child.clone()));
-    //                     }
-    //                 }
-    //             }
-    //             BvhNode::Leaf(hittable) => {
-    //                 if let Some(hit) = hittable.hit(ray, t_min, closest_t) {
-    //                     if hit.t < closest_t {
-    //                         closest_t = hit.t;
-    //                         closest_hit = Some(hit);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     closest_hit
-    // }
 
     #[inline]
     fn bounding_box(&self) -> Aabb {

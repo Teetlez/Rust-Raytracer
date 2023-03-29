@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use crate::{material::Material, ray::Ray};
 
@@ -22,12 +22,12 @@ impl Triangle {
         vertices: [Vec3; 3],
         normals: [Vec3; 3],
         two_sided: bool,
-        material: Arc<Material>,
+        material: Material,
     ) -> Triangle {
         Triangle {
             vertices,
             normals,
-            material,
+            material: Arc::new(material),
             two_sided,
         }
     }
@@ -73,7 +73,7 @@ impl Hittable for Triangle {
             t,
             point: ray.at(t),
             normal,
-            material: &Rc::new(self.material.as_ref()),
+            material: &self.material,
         })
     }
 
