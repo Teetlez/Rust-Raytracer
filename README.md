@@ -147,7 +147,7 @@ Scene(
 
 ### Utah teaset
 
-![1679635546409](https://user-images.githubusercontent.com/47290124/227622945-6c4b7cca-cbed-4f84-bc00-b5110ae4aebb.png)
+![Teaset4](https://user-images.githubusercontent.com/47290124/228722553-80786f99-1114-4343-9dca-36e2d08ac46e.png)
 
 
 
