@@ -52,7 +52,7 @@ Options:
 
 ```
 Scene(
-    hdr: Some("C:\\...\\Rust-Raytracer\\scene\\HDR\\studio_small_08_2k.hdr"),
+    hdr: Some(".\\scene\\HDR\\studio_small_08_2k.hdr"),
     camera: (
         position: (20.0, 10.0, -20.0),
         lookat: (0.0, -0.25, 0.0),
@@ -122,7 +122,7 @@ Scene(
         (
             name: Some("teapot"),
             shape: Mesh(
-                "C:\\...\\Rust-Raytracer\\scene\\models\\newell_teaset\\teapot.obj", // file path
+                ".\\scene\\models\\newell_teaset\\teapot.obj", // file path
                 Some((-1.7, 1.0, 1.7)),  // translation
                 Some((0.5, 0.5, 0.5)),   // scale
                 Some((-0.35, 0.5, 0.0)), // rotation
