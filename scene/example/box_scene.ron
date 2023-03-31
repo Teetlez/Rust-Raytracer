@@ -1,32 +1,32 @@
 Scene(
-    hdr: Some(".\\scene\\HDR\\studio_small_08.hdr"),
+    hdr: Some(".\\scene\\HDR\\moonless_golf.hdr"),
     camera: (
         position: (20.0, 10.0, -20.0),
         lookat: (0.0, -0.25, 0.0),
         fov: 12.0,
         focus_dist: 30.0,
-        apeture: 1.5,
+        apeture: 1.0,
     ),
     materials: {
         "steel": Metal(
-            (0.7, 0.7, 0.7),  // albedo
-            Some(0.05),       // roughness
+            (0.58, 0.56, 0.57),  // albedo
+            Some(0.001),       // roughness
         ),
         "glossy": Glossy(
-            (0.7, 0.7, 0.7),  // albedo
-            Some(1.5),        // reflectance
-            Some(0.05),       // roughness
+            (0.85, 0.82, 0.77),  // albedo
+            Some(0.95),        // reflectance
+            Some(0.2),       // roughness
         ),
         "glass": Dielectric(
             (0.6, 0.1, 0.25), // absorption
             Some(1.52),       // refractive index
-            Some(0.0),        // roughness
+            Some(0.025),        // roughness
         ),
         "diffuse": Lambertian(
-            (0.7, 0.7, 0.7),  // albedo
+            (0.71, 0.73, 0.72),  // albedo
         ),
         "light": Lambertian(
-            (2.0, 2.0, 2.0),  // albedo
+            (2.3, 2.1, 2.2),  // albedo
         ),
         "red_diffuse": Lambertian(
             (0.75, 0.05, 0.05),  // albedo
@@ -45,7 +45,7 @@ Scene(
                 (-0.5, -0.9, -1.0),  // position
                 Some(1.0),           // radius
             ),
-            material: "steel"
+            material: "glossy"
         ),
         (
             name: Some("box1"),
@@ -53,7 +53,7 @@ Scene(
                 (1.0, -0.65, 0.7),      // position
                 Some((1.25, 2.5, 1.25)) // dimensions
             ),
-            material: "diffuse"
+            material: "glass"
         ),
         (
             name: Some("right_wall"),
@@ -71,17 +71,17 @@ Scene(
             ),
             material: "red_diffuse"
         ),
-        (
-            name: Some("Tri"),
-            shape: Triangle(
-                (
-                    (0.0, 0.0, 0.0),   // vertex A
-                    (-1.0, 0.0, -1.0), // vertex B
-                    (0.0, 1.0, -1.0),  // vertex C
-                )
-            ),
-            material: "diffuse",
-        ),
+        // (
+        //     name: Some("Tri"),
+        //     shape: Triangle(
+        //         (
+        //             (0.0, 0.0, 0.0),   // vertex A
+        //             (-1.0, 0.0, -1.0), // vertex B
+        //             (0.0, 1.0, -1.0),  // vertex C
+        //         )
+        //     ),
+        //     material: "diffuse",
+        // ),
         (
             name: Some("base"),
             shape: AxisBox(
@@ -96,7 +96,7 @@ Scene(
                 (0.0, -2.0, 0.0),        // position
                 Some((4.05, 0.2, 4.05)), // dimensions
             ),
-            material: "glass"
+            material: "glossy"
         ),
         (
             name: Some("ceil"),
@@ -104,7 +104,7 @@ Scene(
                 (0.0, 2.1, 0.0),         // position
                 Some((4.05, 0.1, 4.05)), // dimensions
             ),
-            material: "glass"
+            material: "light"
         )
     ],
 )

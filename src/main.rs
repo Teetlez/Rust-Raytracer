@@ -81,7 +81,16 @@ fn main() {
         "Rust Pathtracer",
         args.width,
         args.height,
-        WindowOptions::default(),
+        WindowOptions {
+            borderless: false,
+            title: true,
+            resize: false,
+            scale: minifb::Scale::FitScreen,
+            scale_mode: minifb::ScaleMode::AspectRatioStretch,
+            topmost: false,
+            transparency: false,
+            none: false,
+        },
     )
     .unwrap_or_else(|e| {
         panic!("{}", e);
@@ -135,14 +144,15 @@ fn main() {
     while window.is_open() && !window.is_key_down(Key::Escape) {
         while pass == 0 && window.is_open() {
             if window.get_mouse_down(minifb::MouseButton::Left) {
-                window.set_cursor_visibility(false);
+                window.set_cursor_style(minifb::CursorStyle::ResizeAll);
+
                 renderer.camera.update(
                     window.get_keys(),
                     window.get_mouse_pos(minifb::MouseMode::Pass),
                     window.get_scroll_wheel().get_or_insert((0.0, 0.0)).1,
                 );
             } else {
-                window.set_cursor_visibility(true);
+                renderer.camera.reset_mouse();
                 window.set_cursor_style(minifb::CursorStyle::Arrow);
             }
             if window.is_key_pressed(Key::Enter, minifb::KeyRepeat::Yes) {

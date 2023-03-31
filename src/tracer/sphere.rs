@@ -1,6 +1,6 @@
 use crate::{material::Material, ray::Ray};
 
-use ultraviolet::{Vec3, Vec4};
+use ultraviolet::Vec3;
 
 use super::{
     cube::Aabb,
@@ -9,14 +9,16 @@ use super::{
 
 #[derive(Copy, Clone)]
 pub struct Sphere {
-    pub center: Vec4,
+    pub center: Vec3,
+    pub radius: f32,
     pub material: Material,
 }
 
 impl Sphere {
     pub fn new(center: (f32, f32, f32), radius: f32, material: Material) -> Sphere {
         Sphere {
-            center: Vec4::new(center.0, center.1, center.2, radius),
+            center: Vec3::new(center.0, center.1, center.2),
+            radius,
             material,
         }
     }
@@ -24,10 +26,9 @@ impl Sphere {
 impl Hittable for Sphere {
     #[inline]
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        let oc = ray.pos - self.center.truncated();
+        let oc = ray.pos - self.center;
         let half_b = oc.dot(ray.dir);
-        let c = oc.mag_sq() - (self.center.w * self.center.w);
-        let disc = half_b * half_b - c;
+        let disc = half_b.powi(2) - (oc.mag_sq() - (self.radius.powi(2)));
 
         if disc > 0.0 {
             let h = disc.sqrt();
@@ -37,7 +38,7 @@ impl Hittable for Sphere {
                 return Some(HitRecord::new(
                     temp,
                     hit_point,
-                    ((1.0 / self.center.w) * (hit_point - self.center.truncated())).normalized(),
+                    (hit_point - self.center).normalized(),
                     &self.material,
                 ));
             }
@@ -48,7 +49,7 @@ impl Hittable for Sphere {
                 return Some(HitRecord::new(
                     temp,
                     hit_point,
-                    ((1.0 / self.center.w) * (hit_point - self.center.truncated())).normalized(),
+                    (hit_point - self.center).normalized(),
                     &self.material,
                 ));
             }
@@ -58,10 +59,8 @@ impl Hittable for Sphere {
 
     fn bounding_box(&self) -> Aabb {
         Aabb {
-            min: self.center.truncated()
-                - Vec3::new(self.center.w, self.center.w, self.center.w).abs(),
-            max: self.center.truncated()
-                + Vec3::new(self.center.w, self.center.w, self.center.w).abs(),
+            min: self.center - Vec3::one() * self.radius.abs(),
+            max: self.center + Vec3::one() * self.radius.abs(),
         }
     }
 }
