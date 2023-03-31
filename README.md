@@ -18,7 +18,7 @@ Small, personal pathtracer project written in rust.
 
 ## Planned Features
 
-- [ ] Camera movement
+- [X] Camera movement
 - [ ] Volumes
 - [X] Mesh smooth shading
 - [ ] Cylinder object
