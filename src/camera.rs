@@ -1,6 +1,8 @@
 extern crate fastrand;
+
 use crate::{random, ray::Ray};
 
+use minifb::Key;
 use ultraviolet::{Rotor3, Vec3};
 
 const SENSETIVITY: f32 = 0.0025;
@@ -52,8 +54,8 @@ impl Camera {
         let rd: Vec3 = self.lens_rd.0 * random::quasirandom_in_cocentric_disk(jx, jy);
         let offset: Vec3 = rd.x * self.uvw[0] + rd.y * self.uvw[1];
 
-        let s = (x + ((jy * 0.5) - 1.0)) / (width - 1) as f32;
-        let t = (y + ((jx * 0.5) - 1.0)) / (height - 1) as f32;
+        let s = (x + jy) / (width - 1) as f32;
+        let t = (y + jx) / (height - 1) as f32;
         Ray::new(
             self.view.0 + offset,
             (self.hvc[2] + (s * self.hvc[0]) + (t * self.hvc[1])) - self.view.0 - offset,
@@ -86,26 +88,28 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, keys: Vec<minifb::Key>, mouse_move: Option<(f32, f32)>, scroll: f32) {
+    pub fn update(&mut self, keys: Vec<Key>, mouse_move: Option<(f32, f32)>, scroll: f32) {
         let h = (self.view.2.to_radians() / 2.0).tan();
         let viewport_height: f32 = 2.0 * h;
         let viewport_width: f32 = self.aspect_ratio * viewport_height;
 
         if scroll != 0.0 {
-            self.lens_rd.1 += scroll * 0.083_333_336;
+            self.view.2 += scroll * 0.083_333_336;
         }
 
         self.update_lookat(mouse_move);
 
         keys.iter().for_each(|key| match key {
-            minifb::Key::W => self.forward(),
-            minifb::Key::A => self.left(),
-            minifb::Key::S => self.back(),
-            minifb::Key::D => self.right(),
-            minifb::Key::E => self.up(),
-            minifb::Key::Q => self.down(),
-            minifb::Key::F => self.lens_rd.0 = (self.lens_rd.0 - 0.0025).max(0.0),
-            minifb::Key::R => self.lens_rd.0 += 0.0025,
+            Key::W => self.forward(),
+            Key::A => self.left(),
+            Key::S => self.back(),
+            Key::D => self.right(),
+            Key::E => self.up(),
+            Key::Q => self.down(),
+            Key::Left => self.lens_rd.0 = (self.lens_rd.0 - 0.0025).max(0.0),
+            Key::Right => self.lens_rd.0 += 0.0025,
+            Key::Down => self.lens_rd.1 = (self.lens_rd.1 - 0.25).max(0.0),
+            Key::Up => self.lens_rd.1 += 0.25,
             _ => (),
         });
 

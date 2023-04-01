@@ -181,4 +181,13 @@ impl Material {
             Material::Glossy(g) => g.scatter(ray, hit, r1, r2),
         }
     }
+
+    pub fn color(self) -> Vec3 {
+        match self {
+            Material::Dielectric(d) => d.albedo,
+            Material::Lambertian(l) => l.albedo,
+            Material::Metal(m) => m.albedo,
+            Material::Glossy(g) => g.albedo,
+        }
+    }
 }

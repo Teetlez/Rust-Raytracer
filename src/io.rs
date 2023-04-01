@@ -93,11 +93,6 @@ struct Camera {
     apeture: f32,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct Environment {
-    // Fields for environment data
-}
-
 pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn std::error::Error>> {
     println!("reading file");
     let mut file = File::open(scene_file)?;

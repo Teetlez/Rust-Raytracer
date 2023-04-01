@@ -28,6 +28,13 @@ const M2: Mat3 = Mat3::new(
     Vec3::new(-0.07367, -0.00605, 1.07602),
 );
 
+#[derive(Copy, Clone, Hash)]
+pub enum Mode {
+    Normals,
+    Colors,
+    Image,
+}
+
 #[inline]
 pub fn to_rgb(color: &Vec3, gamma: f32) -> u32 {
     let out = aces_tonemap(color, gamma);
@@ -97,7 +104,7 @@ fn get_pixel_from_vec(dir: Vec3, image: &Option<Image>) -> Option<Vec3> {
 }
 
 #[inline]
-fn color_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
+fn no_bounce(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
         (Vec3::new(1.0, 1.0, -0.5))
             .normalized()
@@ -113,9 +120,18 @@ fn color_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
 }
 
 #[inline]
-fn _normals_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
+fn normals_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
         (hit.normal + Vec3::one()) * 0.5
+    } else {
+        get_sky(ray, image, INFINITY)
+    }
+}
+
+#[inline]
+fn colors_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
+    if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
+        hit.material.color()
     } else {
         get_sky(ray, image, INFINITY)
     }
@@ -143,13 +159,13 @@ pub struct Renderer {
     pub light_clamp: f32,
 }
 impl Renderer {
-    pub fn render(&self, buffer: &[Vec3]) -> Vec<Vec3> {
+    pub fn render(&self, buffer: &[Vec3], mode: Mode) -> Vec<Vec3> {
         (0..self.width * self.height)
             .into_par_iter()
             .chunks((self.width * self.height) / CHUNK_NUM)
             .flat_map(|chunk| {
-                let hdr = self.hdr.as_ref();
-                let world_bvh = self.world.as_ref();
+                let hdr = Rc::new(self.hdr.as_ref());
+                let world_bvh = Rc::new(self.world.as_ref());
                 let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
                 let sample_vec = (0..(chunk.len() * self.sample_rate as usize))
                     .map(|_| qrng.gen())
@@ -165,13 +181,26 @@ impl Renderer {
                             let (jx, jy) = sample_vec[offset % sample_vec.len()];
                             offset += 1;
 
-                            pixel_color += ray_color(
-                                self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                world_bvh,
-                                self.max_bounce,
-                                hdr,
-                                self.light_clamp,
-                            );
+                            pixel_color += match mode {
+                                Mode::Normals => normals_only(
+                                    self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
+                                    &world_bvh,
+                                    &hdr,
+                                ),
+                                Mode::Colors => colors_only(
+                                    self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
+                                    &world_bvh,
+                                    &hdr,
+                                ),
+                                Mode::Image => ray_color(
+                                    self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
+                                    &world_bvh,
+                                    self.max_bounce,
+                                    &hdr,
+                                    self.light_clamp,
+                                ),
+                            };
+
                             if !pixel_color.x.is_finite() {
                                 pixel_color.x = 0.0;
                             }
@@ -190,7 +219,7 @@ impl Renderer {
     }
 
     #[inline]
-    pub fn preview(&self) -> Vec<Vec3> {
+    pub fn preview(&self, mode: Mode) -> Vec<Vec3> {
         (0..self.width * self.height)
             .into_par_iter()
             .chunks((self.width * self.height) / CHUNK_NUM)
@@ -207,18 +236,27 @@ impl Renderer {
                     .map(|pixel| {
                         offset += 1;
                         let (jx, jy) = sample_vec[offset % sample_vec.len()];
-                        color_only(
-                            self.camera.gen_ray(
-                                self.width,
-                                self.height,
-                                (pixel % self.width) as f32,
-                                (self.height - 1 - pixel / self.width) as f32,
-                                jx,
-                                jy,
+                        let (x, y) = (
+                            (pixel % self.width) as f32,
+                            (self.height - 1 - pixel / self.width) as f32,
+                        );
+                        match mode {
+                            Mode::Normals => normals_only(
+                                self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
+                                &world_bvh,
+                                &hdr,
                             ),
-                            &world_bvh,
-                            &hdr,
-                        )
+                            Mode::Colors => colors_only(
+                                self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
+                                &world_bvh,
+                                &hdr,
+                            ),
+                            Mode::Image => no_bounce(
+                                self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
+                                &world_bvh,
+                                &hdr,
+                            ),
+                        }
                     })
                     .collect::<Vec<Vec3>>()
             })
