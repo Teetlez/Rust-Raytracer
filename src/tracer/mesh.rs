@@ -32,17 +32,17 @@ impl Mesh {
         polygons.indices.chunks_exact(3).for_each(|face| {
             let vertices: [Vec3; 3] = [
                 Vec3::new(
-                    polygons.positions[(3 * face[0] as usize)],
+                    polygons.positions[3 * face[0] as usize],
                     polygons.positions[(3 * face[0] as usize) + 1],
                     polygons.positions[(3 * face[0] as usize) + 2],
                 ),
                 Vec3::new(
-                    polygons.positions[(3 * face[1] as usize)],
+                    polygons.positions[3 * face[1] as usize],
                     polygons.positions[(3 * face[1] as usize) + 1],
                     polygons.positions[(3 * face[1] as usize) + 2],
                 ),
                 Vec3::new(
-                    polygons.positions[(3 * face[2] as usize)],
+                    polygons.positions[3 * face[2] as usize],
                     polygons.positions[(3 * face[2] as usize) + 1],
                     polygons.positions[(3 * face[2] as usize) + 2],
                 ),
@@ -55,17 +55,17 @@ impl Mesh {
 
             let mut normals: [Vec3; 3] = [
                 Vec3::new(
-                    polygons.normals[(3 * face[0] as usize)],
+                    polygons.normals[3 * face[0] as usize],
                     polygons.normals[(3 * face[0] as usize) + 1],
                     polygons.normals[(3 * face[0] as usize) + 2],
                 ),
                 Vec3::new(
-                    polygons.normals[(3 * face[1] as usize)],
+                    polygons.normals[3 * face[1] as usize],
                     polygons.normals[(3 * face[1] as usize) + 1],
                     polygons.normals[(3 * face[1] as usize) + 2],
                 ),
                 Vec3::new(
-                    polygons.normals[(3 * face[2] as usize)],
+                    polygons.normals[3 * face[2] as usize],
                     polygons.normals[(3 * face[2] as usize) + 1],
                     polygons.normals[(3 * face[2] as usize) + 2],
                 ),
