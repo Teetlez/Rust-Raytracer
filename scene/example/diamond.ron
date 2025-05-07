@@ -62,37 +62,15 @@ Scene(
             material: "wood",
         ),
         (
-            name: Some("sphere1"),
-            shape: Sphere(
-                (0.0, 1.0, 0.0),
-                Some(1.0),
+            name: Some("diamond"),
+            shape: Mesh(
+                ".\\scene\\models\\diamond\\diamonds1.obj", // file path
+                Some((0.0, 0.0, 0.0)),  // translation
+                Some((1.0, 1.0, 1.0)),  // scale
+                Some((0.0, -0.7, 0.0)),  // rotation
+                false,  // cull backface
             ),
             material: "glass",
-        ),
-        (
-            name: Some("sphere2"),
-            shape: Sphere(
-                (-2.0, 1.0, 0.0),
-                Some(1.0),
-            ),
-            material: "glossy_yellow",
-        ),
-        (
-            name: Some("sphere3"),
-            shape: Sphere(
-                (2.0, 1.0, 0.0),
-                Some(1.0),
-            ),
-            material: "glossy_teal",
-        ),
-        // (
-        //     name: Some("lamp"),
-        //     shape: Sphere(
-        //         (2.0, 5.0, 2.0),
-        //         Some(1.5),
-        //     ),
-        //     material: "light",
-        // ),
-
+        )
     ],
 )

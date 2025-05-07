@@ -8,20 +8,26 @@ Scene(
         apeture: 0.01,
     ),
     materials: {
-        "diffuse": Lambertian(
-            (0.73, 0.73, 0.73),
+        "diffuse": Glossy(
+            (0.73, 0.78, 0.67),            
+            Some(0.05),        // reflectance
+            Some(0.9),         // roughness
         ),
         "light": Lambertian(
             (15.0, 15.0, 15.0),
         ),
         "black": Lambertian(
-            (0.05, 0.05, 0.05),
+            (0.07, 0.04, 0.05),
         ),
-        "red_diffuse": Lambertian(
-            (0.65, 0.05, 0.05),
+        "red_diffuse": Glossy(
+            (0.65, 0.1, 0.05),
+            Some(0.15),        // reflectance
+            Some(0.8),         // roughness
         ),
-        "green_diffuse": Lambertian(
+        "green_diffuse": Glossy(
             (0.12, 0.45, 0.15),
+            Some(0.15),        // reflectance
+            Some(0.8),         // roughness
         ),
     },
     objects: [

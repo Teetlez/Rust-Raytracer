@@ -1,7 +1,6 @@
 use crate::tracer::hittable::Hittable;
 use std::f32::consts::PI;
 use std::f32::INFINITY;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::material::Scatter;
@@ -14,7 +13,7 @@ use ultraviolet::{Mat3, Vec3};
 
 const T_MIN: f32 = 0.00015;
 const T_MAX: f32 = 100000.0;
-const CHUNK_NUM: usize = 64;
+const CHUNK_NUM: usize = 128;
 
 // Tonemapping constants
 const M1: Mat3 = Mat3::new(
@@ -54,50 +53,86 @@ fn aces_tonemap(color: &Vec3, gamma: f32) -> Vec3 {
         .map(|c| c.powf(gamma))
 }
 
+const SURVIVAL_BIAS: f32 = 0.01; // matches your final scale after all bounces
+
 #[inline]
-fn ray_color(ray: Ray, world: &Bvh, depth: u32, image: &Option<Image>, light_clamp: f32) -> Vec3 {
-    let mut color_total = Vec3::one();
-    let mut temp_ray = ray;
-    for _ in 0..depth {
-        if let Some(hit) = world.hit(&temp_ray, T_MIN, T_MAX) {
-            let scatter: Scatter =
-                hit.material
-                    .scatter(temp_ray, hit, fastrand::f32(), fastrand::f32());
-            if scatter.attenuation.component_max() <= 1.0 {
-                color_total *= scatter.attenuation;
-                if color_total.component_max() < fastrand::f32() {
-                    break;
-                }
-                color_total *= color_total.component_max().recip();
-                temp_ray = scatter.ray;
-            } else {
-                return color_total
-                    * scatter
-                        .attenuation
-                        .clamped(Vec3::zero(), Vec3::one() * light_clamp);
+fn ray_color(
+    mut ray: Ray,
+    world: &Bvh,
+    max_depth: u32,
+    image: &Option<Image>,
+    light_clamp: f32,
+) -> Vec3 {
+    let mut throughput = Vec3::one();
+    // Precompute a Vec3 for clamping emissive / light leaks
+    let light_clamp_v = Vec3::one() * light_clamp;
+
+    for _bounce in 0..max_depth {
+        match world.hit(&ray, T_MIN, T_MAX) {
+            None => {
+                // sky‐hit: apply sky color and exit
+                let sky = get_sky(ray, image, light_clamp);
+                return throughput * sky;
             }
-        } else {
-            return color_total * get_sky(temp_ray, image, light_clamp);
+            Some(hit) => {
+                // scatter the ray
+                let u1 = fastrand::f32();
+                let u2 = fastrand::f32();
+                let Scatter {
+                    attenuation: att,
+                    ray: scattered,
+                } = hit.material.scatter(ray, hit, u1, u2);
+
+                let max_att = att.component_max();
+
+                if max_att <= 1.0 {
+                    // accumulate throughput
+                    throughput *= att;
+
+                    // Russian roulette: terminate low‐weight paths
+                    if fastrand::f32() > max_att {
+                        // we “die” here; mimic your final 0.01 fallback
+                        return throughput * SURVIVAL_BIAS;
+                    }
+
+                    // unbiased: renormalize throughput
+                    throughput /= max_att;
+                    ray = scattered;
+                } else {
+                    // “emissive” or light‐leak case: clamp and return immediately
+                    let le = att.clamped(Vec3::zero(), light_clamp_v);
+                    return throughput * le;
+                }
+            }
         }
     }
-    color_total * 0.01
+    // if we hit max_depth without an early exit, apply a small bias
+    throughput * SURVIVAL_BIAS
 }
+
+const INV_TWO_PI: f32 = 0.5 / PI; // 1 / (2π)
+const INV_PI: f32 = 1.0 / PI; // 1 / π
 
 #[inline]
 fn get_pixel_from_vec(dir: Vec3, image: &Option<Image>) -> Option<Vec3> {
-    if let Some(img) = image.as_ref() {
-        let u = (dir.x.atan2(dir.z) + PI) / (2.0 * PI);
-        let v = (-dir.y).acos() / PI;
+    let img = image.as_ref()?;
+    // Precompute these once per frame (on Renderer) and store as f32
+    let w_m1 = (img.width - 1) as f32;
+    let h_m1 = (img.height - 1) as f32;
 
-        if u <= 1.0 && v <= 1.0 {
-            let color = img.pixel(
-                (u * (img.width - 1) as f32) as usize,
-                ((1.0 - v) * (img.height - 1) as f32) as usize,
-            );
-            Some(Vec3::new(color.r, color.g, color.b))
-        } else {
-            None
-        }
+    // u: [0,1), based on azimuth
+    let u = 0.5 + dir.x.atan2(dir.z) * INV_TWO_PI;
+    // v: [0,1), based on elevation, using asin (range [-π/2, π/2])
+    let y = -dir.y.clamp(-1.0, 1.0);
+    let v = 0.5 - y.asin() * INV_PI;
+
+    // Only sample if inside [0,1)
+    if (0.0..1.0).contains(&u) && (0.0..1.0).contains(&v) {
+        // Compute integer texel coords
+        let ix = (u * w_m1) as usize;
+        let iy = (h_m1 - v * h_m1) as usize;
+        let pixel = img.pixel(ix, iy);
+        Some(Vec3::new(pixel.r, pixel.g, pixel.b))
     } else {
         None
     }
@@ -137,16 +172,34 @@ fn colors_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     }
 }
 
-#[inline]
-fn get_sky(ray: Ray, image: &Option<Image>, light_clamp: f32) -> Vec3 {
-    if let Some(color) = get_pixel_from_vec(ray.dir, image) {
-        Vec3::new(color[0], color[1], color[2]).clamped(Vec3::zero(), Vec3::one() * light_clamp)
-    } else {
-        let t = 0.5 * (ray.dir.dot(Vec3::new(-1.0, 0.75, 0.5).normalized()) + 1.0);
-        ((1.0 - t) * Vec3::one() + t * Vec3::new(0.1, 0.3, 0.8)) * 2.0
-    }
+// Pre-normalized “sun” direction and sky‐gradient colors
+const SUN_DIR: Vec3 = Vec3::new(-1.0, 0.75, 0.5);
+const SKY_BOTTOM: Vec3 = Vec3::new(1.0, 1.0, 1.0);
+const SKY_TOP: Vec3 = Vec3::new(0.1, 0.3, 0.8);
+
+// Single static clamp‐by‐light vector
+fn clamp_limit(light_clamp: f32) -> Vec3 {
+    Vec3::one() * light_clamp
 }
 
+#[inline]
+fn get_sky(ray: Ray, image: &Option<Image>, light_clamp: f32) -> Vec3 {
+    // 1) HDR lookup
+    if let Some(hdr_col) = get_pixel_from_vec(ray.dir, image) {
+        // clamp in one call: hdr_col.min(clamp_limit).max(ZERO)
+        return hdr_col.clamped(Vec3::zero(), clamp_limit(light_clamp));
+    }
+
+    // 2) Procedural gradient
+    // Compute dot once
+    let t = 0.5 * (ray.dir.dot(SUN_DIR.normalized()) + 1.0);
+
+    // Linear blend: SKY_BOTTOM*(1 - t) + SKY_TOP*t, then *2.0
+    // => SKY_BOTTOM + (SKY_TOP - SKY_BOTTOM)*t, then *2.0
+    let mut sky = SKY_BOTTOM;
+    sky += (SKY_TOP - SKY_BOTTOM) * t;
+    sky * 2.0
+}
 #[derive(Clone)]
 pub struct Renderer {
     pub width: usize,
@@ -160,16 +213,17 @@ pub struct Renderer {
 }
 impl Renderer {
     pub fn render(&self, buffer: &[Vec3], mode: Mode) -> Vec<Vec3> {
+        let hdr = self.hdr.as_ref();
+        let world_bvh = self.world.as_ref();
+        let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
+        let sample_vec = (0..((self.width * self.height) / CHUNK_NUM) * self.sample_rate as usize)
+            .map(|_| qrng.gen())
+            .collect::<Vec<(f32, f32)>>()
+            .into_boxed_slice();
         (0..self.width * self.height)
             .into_par_iter()
             .chunks((self.width * self.height) / CHUNK_NUM)
             .flat_map(|chunk| {
-                let hdr = Rc::new(self.hdr.as_ref());
-                let world_bvh = Rc::new(self.world.as_ref());
-                let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
-                let sample_vec = (0..(chunk.len() * self.sample_rate as usize))
-                    .map(|_| qrng.gen())
-                    .collect::<Vec<(f32, f32)>>();
                 chunk
                     .iter()
                     .map(|pixel| {
@@ -220,18 +274,20 @@ impl Renderer {
 
     #[inline]
     pub fn preview(&self, mode: Mode) -> Vec<Vec3> {
+        let hdr = self.hdr.as_ref();
+        let world_bvh = self.world.as_ref();
+        let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
+        let sample_vec = (0..(self.width * self.height) / CHUNK_NUM)
+            .map(|_| qrng.gen())
+            .collect::<Vec<(f32, f32)>>()
+            .into_boxed_slice();
         (0..self.width * self.height)
             .into_par_iter()
             .chunks((self.width * self.height) / CHUNK_NUM)
             .flat_map(|chunk| {
-                let hdr = Rc::new(self.hdr.as_ref());
-                let world_bvh = Rc::new(self.world.as_ref());
-                let qrng = &mut Qrng::<(f32, f32)>::new(fastrand::f64());
-                let sample_vec = (0..chunk.len())
-                    .map(|_| qrng.gen())
-                    .collect::<Vec<(f32, f32)>>();
                 let mut offset = fastrand::usize(0..sample_vec.len());
                 chunk
+                    .as_slice()
                     .iter()
                     .map(|pixel| {
                         offset += 1;

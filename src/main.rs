@@ -96,7 +96,7 @@ fn main() {
         panic!("{}", e);
     });
 
-    window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
+    window.set_target_fps(60);
 
     let mut renderer = if let Some(path) = &args.scene {
         io::load_scene(Path::new(path), &args).unwrap()
@@ -108,8 +108,9 @@ fn main() {
 
     println!("press Enter to start render");
     let mode = preview_render(&mut window, &mut renderer, &args);
-
+    window.set_target_fps(1);
     let mut buffer = render_image(&mut window, &mut renderer, &args, mode);
+    window.set_target_fps(30);
 
     if args.filter {
         (1..4).for_each(|i| {
@@ -163,7 +164,7 @@ fn main() {
 
 fn make_default_setup(args: &Args) -> Renderer {
     // Load HDR
-    let image = if let Ok(f) = File::open(r".\scene\HDR\lythwood_room.hdr") {
+    let image = if let Ok(f) = File::open(r".\scene\HDR\studio_small.hdr") {
         let reader = BufReader::new(f);
         Arc::new(radiant::load(reader).ok())
     } else {

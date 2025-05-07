@@ -1,5 +1,5 @@
 Scene(
-    hdr: Some(".\\scene\\HDR\\moonless_golf.hdr"),
+    hdr: Some(".\\scene\\HDR\\rogland_night.hdr"),
     camera: (
         position: (20.0, 10.0, -20.0),
         lookat: (0.0, -0.25, 0.0),
@@ -20,10 +20,10 @@ Scene(
         "glass": Dielectric(
             (0.6, 0.1, 0.25), // absorption
             Some(1.52),       // refractive index
-            Some(0.025),        // roughness
+            Some(0.075),        // roughness
         ),
         "diffuse": Lambertian(
-            (0.71, 0.73, 0.72),  // albedo
+            (0.71, 0.73, 0.76),  // albedo
         ),
         "light": Lambertian(
             (2.3, 2.1, 2.2),  // albedo
@@ -32,10 +32,10 @@ Scene(
             (0.75, 0.05, 0.05),  // albedo
         ),
         "green_diffuse": Lambertian(
-            (0.05, 0.70, 0.05), // albedo
+            (0.15, 0.70, 0.15), // albedo
         ),
         "blue_diffuse": Lambertian(
-            (0.05, 0.1, 0.85),  // albedo
+            (0.15, 0.2, 0.85),  // albedo
         )
     },
     objects: [
@@ -52,6 +52,15 @@ Scene(
             shape: AxisBox(
                 (1.0, -0.65, 0.7),      // position
                 Some((1.25, 2.5, 1.25)) // dimensions
+            ),
+            material: "steel"
+        ),
+        (
+            name: Some("box2"),
+            shape: Box(
+                (1.0, -1.25, -1.0),      // position
+                Some((0.75, 0.75, 0.75)), // dimensions
+                Some((0.75, 0.75, 0.75)), // rotation
             ),
             material: "glass"
         ),
