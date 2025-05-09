@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
         .with_title("GPU Path Tracer".to_string());
     let window = event_loop.create_window(window_att)?;
     let (device, queue, surface) = connect_to_gpu(&window).await?;
-    let renderer = gpu_render::PathTracer::new(device, queue);
+    let renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
 
     event_loop.run(|event, control_handle| {
         control_handle.set_control_flow(ControlFlow::Poll);
