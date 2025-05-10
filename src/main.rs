@@ -5,7 +5,7 @@ use {
     anyhow::{Context, Result},
     winit::{
         event::{Event, WindowEvent},
-        event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+        event_loop::{ControlFlow, EventLoop},
         window::{Window, WindowAttributes},
     },
 };
@@ -13,8 +13,8 @@ use {
 mod gpu_render;
 
 // Assign the appropriate window size in terms of physical pixels based on your display DPI.
-const WIDTH: u32 = 1024;
-const HEIGHT: u32 = 768;
+const WIDTH: u32 = 800;
+const HEIGHT: u32 = 600;
 
 #[pollster::main]
 async fn main() -> Result<()> {
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
         .with_title("GPU Path Tracer".to_string());
     let window = event_loop.create_window(window_att)?;
     let (device, queue, surface) = connect_to_gpu(&window).await?;
-    let renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
+    let mut renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
 
     event_loop.run(|event, control_handle| {
         control_handle.set_control_flow(ControlFlow::Poll);
