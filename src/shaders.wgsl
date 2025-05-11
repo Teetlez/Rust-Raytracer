@@ -1,10 +1,16 @@
 const FLT_MAX: f32 = 3.40282346638528859812e+38;
-const OBJECT_COUNT: u32 = 2;
 const GOLDEN_RATIO: f32 = (sqrt(5.0) + 1.0) / 2.0;
 const PLASTIC_NUMBER: f32 = 1.3247179572447460259609088563;
+const TWO_PI: f32 = 6.2831853;
+const MAX_DEPTH: u32 = 6u;
+const EPSILON = 1e-3;
+const OBJECT_COUNT: u32 = 4;
 alias Scene = array<Sphere, OBJECT_COUNT>;
-var<private> scene: Scene = Scene(Sphere(vec3(0., 0., - 1.), 0.5), Sphere(vec3(0., - 100.5, - 1.), 100.),);
+alias Materials = array<Material, OBJECT_COUNT>;
 
+var<private> materials: Materials = Materials(Material(vec3(0.7, 0.5, 0.5), 1.), Material(vec3(0.5, 0.5, 0.9), 0.), Material(vec3(0.7, 0.9, 0.2), 0.), Material(vec3(1.), - (1.5)),);
+
+var<private> scene: Scene = Scene(Sphere(vec3(- 1.1, 0.5, 0.), 0.5, 0), Sphere(vec3(0., 0.5, 0.), 0.5, 3), Sphere(vec3(1.1, 0.5, 0.), 0.5, 1), Sphere(vec3(0., - 2e2 - EPSILON, 0.), 2e2, 2),);
 @group(0) @binding(1)
 var radiance_samples_old: texture_2d<f32>;
 @group(0) @binding(2)
@@ -19,9 +25,17 @@ fn display_vs(@builtin(vertex_index) vid: u32) -> @builtin(position) vec4f {
 }
 
 struct Uniforms {
+    camera: CameraUniforms,
     width: u32,
     height: u32,
     frame_num: u32,
+}
+
+struct CameraUniforms {
+    origin: vec3f,
+    u: vec3f,
+    v: vec3f,
+    w: vec3f,
 }
 
 struct Rng {
@@ -89,14 +103,16 @@ fn gen2_qrng(seed: u32) -> vec2f {
 struct Sphere {
     center: vec3f,
     radius: f32,
+    material: u32,
 }
 
 fn intersect_sphere(ray: Ray, sphere: Sphere) -> Hit {
     let v = ray.pos - sphere.center;
     let a = dot(ray.dir, ray.dir);
     let b = dot(v, ray.dir);
+    let c = dot(v, v) - sphere.radius * sphere.radius;
 
-    let d = b * b - a * (dot(v, v) - sphere.radius * sphere.radius);
+    let d = b * b - a * c;
     if d < 0.0 {
         return no_hit();
     }
@@ -107,14 +123,83 @@ fn intersect_sphere(ray: Ray, sphere: Sphere) -> Hit {
     let t1 = (mb - sqrt_d) * recip_a;
     let t2 = (mb + sqrt_d) * recip_a;
 
-    let t = select(t2, t1, t1 > 0.);
-    if t <= 0. {
+    let t = select(t2, t1, t1 > EPSILON);
+    if t <= EPSILON {
         return no_hit();
     }
 
     let p = point_on_ray(ray, t);
     let N = (p - sphere.center) / sphere.radius;
-    return Hit(N, t);
+    return Hit(N, t, sphere.material);
+}
+
+// Uniformly sample a unit sphere centered at the origin
+fn sample_sphere() -> vec3f {
+    let r0 = rand_f32();
+    let r1 = rand_f32();
+
+    // Map r0 to [-1, 1]
+    let y = 1. - 2. * r0;
+
+    // Compute the projected radius on the xz-plane using Pythagorean theorem
+    let xz_r = sqrt(1. - y * y);
+
+    let phi = TWO_PI * r1;
+    return vec3(xz_r * cos(phi), y, xz_r * sin(phi));
+}
+
+fn intersect_scene(ray: Ray) -> Hit {
+    var closest_hit = no_hit();
+    closest_hit.t = FLT_MAX;
+    for (var i = 0u; i < OBJECT_COUNT; i += 1u) {
+        let sphere = scene[i];
+        let hit = intersect_sphere(ray, sphere);
+        if hit.t > EPSILON && hit.t < closest_hit.t {
+            closest_hit = hit;
+        }
+    }
+    if closest_hit.t < FLT_MAX {
+        return closest_hit;
+    }
+    return no_hit();
+}
+
+struct Scatter {
+    attenuation: vec3f,
+    ray: Ray,
+}
+
+fn sample_lambertian(normal: vec3f) -> vec3f {
+    return normal + sample_sphere() * (1. - EPSILON);
+}
+
+fn scatter(input_ray: Ray, hit: Hit, material: Material) -> Scatter {
+    let incident = normalize(input_ray.dir);
+    let incident_dot_normal = dot(incident, hit.normal);
+    let is_front_face = incident_dot_normal < 0.;
+    let N = select(- hit.normal, hit.normal, is_front_face);
+    let cos_theta = abs(incident_dot_normal);
+
+    // `ior`, `ref_ratio`, and `cannot_refract` only have meaning if the material is transmissive.
+    let is_transmissive = material.specular_or_ior < 0.;
+    let is_specular = material.specular_or_ior > 0.;
+    let ior = abs(material.specular_or_ior);
+    let ref_ratio = select(ior, 1. / ior, is_front_face);
+    let cannot_refract = ref_ratio * ref_ratio * (1.0 - cos_theta * cos_theta) > 1.;
+
+    var scattered: vec3f;
+    if is_specular || (is_transmissive && cannot_refract) {
+        scattered = reflect(incident, N);
+    }
+    else if is_transmissive {
+        scattered = refract(incident, N, ref_ratio);
+    }
+    else {
+        scattered = sample_lambertian(N);
+    }
+    let output_ray = Ray(point_on_ray(input_ray, hit.t), normalize(scattered));
+    let attenuation = material.color * 0.9;
+    return Scatter(attenuation, output_ray);
 }
 
 struct Ray {
@@ -129,11 +214,21 @@ fn point_on_ray(ray: Ray, t: f32) -> vec3<f32> {
 struct Hit {
     normal: vec3f,
     t: f32,
+    material: u32,
 }
 
 fn no_hit() -> Hit {
     // Return invalid hit
-    return Hit(vec3(0.0), - 1.0);
+    return Hit(normalize(vec3(0.)), - 1., 0);
+}
+
+fn is_hit_valid(hit: Hit) -> bool {
+    return hit.t > EPSILON;
+}
+
+struct Material {
+    color: vec3f,
+    specular_or_ior: f32,
 }
 
 fn sky_color(ray: Ray) -> vec3f {
@@ -146,35 +241,41 @@ var<uniform> uniforms: Uniforms;
 
 @fragment
 fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let origin = vec3(0.0);
+    init_rng(vec2u(pos.xy));
+    let origin = uniforms.camera.origin;
     let focus_dist = 1.0;
     let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
 
     // Offset and normalize the viewport coordinates of the ray.
     var uv = (pos.xy + (gen2_qrng(uniforms.frame_num) - 0.5)) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
 
-    // Normalize viewport coords
-    // var uv = pos.xy / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
-
+    // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
     uv = (2.0 * uv - vec2(1.0)) * vec2(aspect_ratio, - 1.0);
-    let direction = vec3(uv, - focus_dist);
-    let ray = Ray(origin, direction);
 
-    var closest_hit = Hit(vec3(0.), FLT_MAX);
-    for (var i = 0u; i < OBJECT_COUNT; i += 1u) {
-        let sphere = scene[i];
-        let hit = intersect_sphere(ray, sphere);
-        if hit.t > 0. && hit.t < closest_hit.t {
-            closest_hit = hit;
+    // Compute the scene-space ray direction by rotating the camera-space vector into a new
+    // basis.
+    let camera_rotation = mat3x3(uniforms.camera.u, uniforms.camera.v, uniforms.camera.w);
+    let direction = camera_rotation * vec3(uv, focus_dist);
+
+    var ray = Ray(origin, direction);
+    var throughput = vec3f(1.);
+    var radiance_sample = vec3(0.);
+    let offset = u32(rand_f32() * (100.0 + (pos.x * pos.y)));
+
+    var path_length = 0u;
+    while path_length < MAX_DEPTH {
+        let hit = intersect_scene(ray);
+        if !is_hit_valid(hit) {
+            // If no intersection was found, return the color of the sky and terminate the path.
+            radiance_sample += throughput * sky_color(ray);
+            break;
         }
-    }
 
-    var radiance_sample: vec3f;
-    if closest_hit.t - 0.00001 < FLT_MAX {
-        radiance_sample = vec3(0.5 * closest_hit.normal + vec3(0.5));
-    }
-    else {
-        radiance_sample = sky_color(ray);
+        let material = materials[hit.material];
+        let scattered = scatter(ray, hit, material);
+        throughput *= scattered.attenuation;
+        ray = scattered.ray;
+        path_length += 1u;
     }
 
     // Fetch the old sum of samples.
@@ -190,6 +291,7 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let new_sum = radiance_sample + old_sum;
     textureStore(radiance_samples_new, vec2u(pos.xy), vec4(new_sum, 0.));
 
-    // Display the average.
-    return vec4(new_sum / f32(uniforms.frame_num), 1.);
+    // Display the average after gamma correction (gamma = 2.2)
+    let color = new_sum / f32(uniforms.frame_num);
+    return vec4(pow(color, vec3(1. / 2.2)), 1.);
 }

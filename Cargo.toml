@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 mimalloc = { version = "0.1", default-features = false }
-ultraviolet = "0.10"
+ultraviolet = { version = "0.10", features = ["bytemuck"] }
 minifb = "0.28"
 fastrand = "2.3"
 quasirandom = "0.3"

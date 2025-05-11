@@ -1,4 +1,6 @@
+use crate::gpu_camera::{Camera, CameraUniforms};
 use bytemuck::{Pod, Zeroable};
+use ultraviolet::Vec3;
 use wgpu::PipelineCompilationOptions;
 
 pub struct PathTracer {
@@ -15,9 +17,11 @@ pub struct PathTracer {
 #[derive(Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
 struct Uniforms {
+    camera: CameraUniforms,
     width: u32,
     height: u32,
     frame_num: u32,
+    _pad: u32,
 }
 
 impl PathTracer {
@@ -30,10 +34,13 @@ impl PathTracer {
         let (display_pipeline, display_layout) = create_display_pipeline(&device, &shader_module);
 
         // Initialize the uniform buffer.
+
         let uniforms = Uniforms {
+            camera: CameraUniforms::zeroed(),
             width: 800,
             height: 600,
             frame_num: 0,
+            _pad: 0,
         };
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -62,7 +69,12 @@ impl PathTracer {
         }
     }
 
-    pub fn render_frame(&mut self, target: &wgpu::TextureView) {
+    pub fn reset_samples(&mut self) {
+        self.uniforms.frame_num = 0;
+    }
+
+    pub fn render_frame(&mut self, camera: &Camera, target: &wgpu::TextureView) {
+        self.uniforms.camera = *camera.uniforms();
         self.uniforms.frame_num += 1;
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));

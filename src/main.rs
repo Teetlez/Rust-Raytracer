@@ -3,13 +3,16 @@
 
 use {
     anyhow::{Context, Result},
+    gpu_camera::Camera,
+    ultraviolet::Vec3,
     winit::{
-        event::{Event, WindowEvent},
+        event::{DeviceEvent, ElementState, Event, MouseScrollDelta, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
         window::{Window, WindowAttributes},
     },
 };
 
+mod gpu_camera;
 mod gpu_render;
 
 // Assign the appropriate window size in terms of physical pixels based on your display DPI.
@@ -27,6 +30,13 @@ async fn main() -> Result<()> {
     let window = event_loop.create_window(window_att)?;
     let (device, queue, surface) = connect_to_gpu(&window).await?;
     let mut renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
+    let mut camera = Camera::look_at(
+        Vec3::new(0., 0.55, 1.5),
+        Vec3::new(0., 0.5, 0.),
+        Vec3::new(0., 1., 0.),
+    );
+    let mut left_mouse_button_pressed = false;
+    let mut right_mouse_button_pressed = false;
 
     event_loop.run(|event, control_handle| {
         control_handle.set_control_flow(ControlFlow::Poll);
@@ -43,10 +53,41 @@ async fn main() -> Result<()> {
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default());
 
-                    renderer.render_frame(&render_target);
+                    renderer.render_frame(&camera, &render_target);
 
                     frame.present();
                     window.request_redraw();
+                }
+                _ => (),
+            },
+            Event::DeviceEvent { event, .. } => match event {
+                DeviceEvent::MouseWheel { delta } => {
+                    let delta = match delta {
+                        MouseScrollDelta::PixelDelta(delta) => 0.001 * delta.y as f32,
+                        MouseScrollDelta::LineDelta(_, y) => y * 0.1,
+                    };
+                    camera.zoom(delta);
+                    renderer.reset_samples();
+                }
+                DeviceEvent::MouseMotion { delta: (dx, dy) } => {
+                    let dx = dx as f32 * 0.01;
+                    let dy = dy as f32 * -0.01;
+                    if left_mouse_button_pressed {
+                        camera.orbit(dx, dy);
+                        renderer.reset_samples();
+                    }
+                    if right_mouse_button_pressed {
+                        camera.pan(dx, dy);
+                        renderer.reset_samples();
+                    }
+                }
+                DeviceEvent::Button { button, state, .. } => {
+                    let pressed = state == ElementState::Pressed;
+                    match button {
+                        0 => left_mouse_button_pressed = pressed,
+                        1 => right_mouse_button_pressed = pressed,
+                        _ => (),
+                    }
                 }
                 _ => (),
             },
