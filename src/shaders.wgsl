@@ -1,6 +1,7 @@
 const FLT_MAX: f32 = 3.40282346638528859812e+38;
 const GOLDEN_RATIO: f32 = (sqrt(5.0) + 1.0) / 2.0;
 const PLASTIC_NUMBER: f32 = 1.3247179572447460259609088563;
+const PI: f32 = 3.1415926535897932384626433832795;
 const TWO_PI: f32 = 6.2831853;
 const MAX_DEPTH: u32 = 6u;
 const EPSILON = 1e-3;
@@ -51,30 +52,44 @@ var<private> qrng: Qrng;
 
 fn init_rng(pixel: vec2u) {
     // Seed the PRNG using the scalar index of the pixel and the current frame count.
-    let seed = (pixel.x + pixel.y * uniforms.width) ^ jenkins_hash(uniforms.frame_num);
-    rng.state = jenkins_hash(seed);
+    let seed = (pixel.x + pixel.y * uniforms.width) ^ pcg(uniforms.frame_num);
+    rng.state = pcg(seed);
 }
 
-// A slightly modified version of the "One-at-a-Time Hash" function by Bob Jenkins.
-// See https://www.burtleburtle.net/bob/hash/doobs.html
-fn jenkins_hash(i: u32) -> u32 {
-    var x = i;
-    x += x << 10u;
-    x ^= x >> 6u;
-    x += x << 3u;
-    x ^= x >> 11u;
-    x += x << 15u;
-    return x;
+// https://www.pcg-random.org/
+fn pcg(n: u32) -> u32 {
+    var h = n * 747796405u + 2891336453u;
+    h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
+    return (h >> 22u) ^ h;
 }
 
-// The 32-bit "xor" function from Marsaglia G., "Xorshift RNGs", Section 3.
-fn xorshift32() -> u32 {
-    var x = rng.state;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    rng.state = x;
-    return x;
+fn pcg2d(p: vec2u) -> vec2u {
+    var v = p * 1664525u + 1013904223u;
+    v.x += v.y * 1664525u;
+    v.y += v.x * 1664525u;
+    v ^= v >> vec2u(16u);
+    v.x += v.y * 1664525u;
+    v.y += v.x * 1664525u;
+    v ^= v >> vec2u(16u);
+    return v;
+}
+
+// http://www.jcgt.org/published/0009/03/02/
+fn pcg3d(p: vec3u) -> vec3u {
+    var v = p * 1664525u + 1013904223u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> vec3u(16u);
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    return v;
+}
+
+fn next_pcg() -> u32 {
+    rng.state = pcg(rng.state);
+    return rng.state;
 }
 
 // Returns a random float in the range [0...1]. This sets the floating point exponent to zero and
@@ -82,7 +97,7 @@ fn xorshift32() -> u32 {
 // generates a number in the range [1, 1.9999999], which is then mapped to [0, 0.9999999] by
 // subtraction. See Ray Tracing Gems II, Section 14.3.4.
 fn rand_f32() -> f32 {
-    return bitcast<f32>(0x3f800000u | (xorshift32() >> 9u)) - 1.;
+    return bitcast<f32>(0x3f800000u | (next_pcg() >> 9u)) - 1.;
 }
 
 fn gen1_qrng(seed: u32) -> f32 {
@@ -98,6 +113,17 @@ fn gen2_qrng(seed: u32) -> vec2f {
     let x = (0.5 + a1 * n) % 1.0;
     let y = (0.5 + a2 * n) % 1.0;
     return vec2f(x, y);
+}
+
+fn gen_qrng_disk(seed: u32) -> vec2f {
+    let rand = gen2_qrng(seed);
+    let a = (2.0 * rand.x) - 1.0;
+    let b = (2.0 * rand.y) - 1.0;
+    let comp = (a * a) > (b * b);
+    let radius = select(a, b, comp);
+    let phi = select((PI / 4.0) * (b / a), (PI / 2.0) - ((PI / 4.0) * (a / b)), comp);
+
+    return vec2f(cos(phi) * radius, sin(phi) * radius);
 }
 
 struct Sphere {
@@ -129,7 +155,7 @@ fn intersect_sphere(ray: Ray, sphere: Sphere) -> Hit {
     }
 
     let p = point_on_ray(ray, t);
-    let N = (p - sphere.center) / sphere.radius;
+    let N = ((p - sphere.center) / sphere.radius);
     return Hit(N, t, sphere.material);
 }
 
@@ -173,6 +199,14 @@ fn sample_lambertian(normal: vec3f) -> vec3f {
     return normal + sample_sphere() * (1. - EPSILON);
 }
 
+fn schlick(cosine: f32, ior: f32) -> f32 {
+    // Use Schlick's approximation for reflectance.
+    let pow = (1 - cosine);
+    var r0 = (1 - ior) / (1 + ior);
+    r0 *= r0;
+    return clamp(r0 + (1 - r0) * (pow * pow * pow * pow * pow * pow), 0.0, 1.0);
+}
+
 fn scatter(input_ray: Ray, hit: Hit, material: Material) -> Scatter {
     let incident = normalize(input_ray.dir);
     let incident_dot_normal = dot(incident, hit.normal);
@@ -188,7 +222,8 @@ fn scatter(input_ray: Ray, hit: Hit, material: Material) -> Scatter {
     let cannot_refract = ref_ratio * ref_ratio * (1.0 - cos_theta * cos_theta) > 1.;
 
     var scattered: vec3f;
-    if is_specular || (is_transmissive && cannot_refract) {
+    let attenuation = material.color * 0.9;
+    if is_specular || (is_transmissive && cannot_refract) || (is_transmissive && schlick(cos_theta, ior) > gen1_qrng(uniforms.frame_num)) {
         scattered = reflect(incident, N);
     }
     else if is_transmissive {
@@ -198,7 +233,6 @@ fn scatter(input_ray: Ray, hit: Hit, material: Material) -> Scatter {
         scattered = sample_lambertian(N);
     }
     let output_ray = Ray(point_on_ray(input_ray, hit.t), normalize(scattered));
-    let attenuation = material.color * 0.9;
     return Scatter(attenuation, output_ray);
 }
 
@@ -241,7 +275,10 @@ var<uniform> uniforms: Uniforms;
 
 @fragment
 fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    init_rng(vec2u(pos.xy));
+    let pixels = vec2u(pos.xy);
+    init_rng(pixels);
+    let qrng_offset = pcg(pixels.x + pixels.y * uniforms.width) % (uniforms.width * uniforms.height);
+    let blur = gen_qrng_disk(uniforms.frame_num + qrng_offset);
     let origin = uniforms.camera.origin;
     let focus_dist = 1.0;
     let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
@@ -260,7 +297,6 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var ray = Ray(origin, direction);
     var throughput = vec3f(1.);
     var radiance_sample = vec3(0.);
-    let offset = u32(rand_f32() * (100.0 + (pos.x * pos.y)));
 
     var path_length = 0u;
     while path_length < MAX_DEPTH {
