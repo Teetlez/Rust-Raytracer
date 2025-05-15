@@ -296,7 +296,7 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let pixels = vec2u(pos.xy);
     init_rng(pixels);
     let qrng_offset = pcg(pixels.x + pixels.y * uniforms.width) % (uniforms.width * uniforms.height);
-    let blur = gen_qrng_disk(uniforms.frame_num + qrng_offset, uniforms.camera.lens_rd.x);
+    let blur = (gen2_qrng(uniforms.frame_num + qrng_offset) - 0.5) * uniforms.camera.lens_rd.x;
     let jitter = gen2_qrng(uniforms.frame_num / 15) - 0.5;
 
     let aspect_ratio = f32(uniforms.width) / f32(uniforms.height * 2);
@@ -307,7 +307,7 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     // Offset and normalize the viewport coordinates of the ray.
     uv = (2.0 * uv - vec2(1.0)) * vec2(aspect_ratio, - 1.0);
     let hvc = ((uniforms.camera.hvc[2] + (uv.x * uniforms.camera.hvc[0]) + (uv.y * uniforms.camera.hvc[1])));
-    let ray_dir = normalize(hvc - origin);
+    let ray_dir = normalize(hvc - uniforms.camera.eye - offset);
 
     var ray = Ray(origin, ray_dir);
     var throughput = vec3f(1.);
@@ -344,9 +344,9 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
     // Display the average after gamma correction (gamma = 2.2)
     let color = new_sum / f32(uniforms.frame_num);
-    // return aces_tonemap(color, 2.2);
+    return aces_tonemap(color, 2.2);
 
-    return vec4(pow(color, vec3(1. / 2.2)), 1.);
+    // return vec4(pow(color, vec3(1. / 2.2)), 1.);
 
 }
 

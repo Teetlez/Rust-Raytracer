@@ -32,12 +32,12 @@ async fn main() -> Result<()> {
     let (device, queue, surface) = connect_to_gpu(&window).await?;
     let mut renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
     let mut camera = Camera::new(
-        Vec3::new(0.0, 0.5, -3.0),
-        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::new(0.0, 0.75, -3.0),
+        Vec3::new(0.0, -0.25, -1.0),
         Vec3::unit_y(),
         20.0,
         (WIDTH as f32) / (HEIGHT as f32),
-        0.5,
+        0.1,
         3.0,
     );
     camera.update_uniforms();
