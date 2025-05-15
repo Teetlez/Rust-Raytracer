@@ -3,11 +3,12 @@
 
 use {
     anyhow::{Context, Result},
-    gpu_camera::Camera,
+    gpu_camera::{Camera, Direction},
     ultraviolet::Vec3,
     winit::{
-        event::{DeviceEvent, ElementState, Event, MouseScrollDelta, WindowEvent},
+        event::{DeviceEvent, ElementState, Event, MouseScrollDelta, RawKeyEvent, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
+        keyboard::{KeyCode, PhysicalKey},
         window::{Window, WindowAttributes},
     },
 };
@@ -16,8 +17,8 @@ mod gpu_camera;
 mod gpu_render;
 
 // Assign the appropriate window size in terms of physical pixels based on your display DPI.
-const WIDTH: u32 = 800;
-const HEIGHT: u32 = 600;
+const WIDTH: u32 = 1600;
+const HEIGHT: u32 = 900;
 
 #[pollster::main]
 async fn main() -> Result<()> {
@@ -30,11 +31,16 @@ async fn main() -> Result<()> {
     let window = event_loop.create_window(window_att)?;
     let (device, queue, surface) = connect_to_gpu(&window).await?;
     let mut renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
-    let mut camera = Camera::look_at(
-        Vec3::new(0., 0.55, 1.5),
-        Vec3::new(0., 0.5, 0.),
-        Vec3::new(0., 1., 0.),
+    let mut camera = Camera::new(
+        Vec3::new(0.0, 0.5, -3.0),
+        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::unit_y(),
+        20.0,
+        (WIDTH as f32) / (HEIGHT as f32),
+        0.5,
+        3.0,
     );
+    camera.update_uniforms();
     let mut left_mouse_button_pressed = false;
     let mut right_mouse_button_pressed = false;
 
@@ -63,22 +69,29 @@ async fn main() -> Result<()> {
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::MouseWheel { delta } => {
                     let delta = match delta {
-                        MouseScrollDelta::PixelDelta(delta) => 0.001 * delta.y as f32,
-                        MouseScrollDelta::LineDelta(_, y) => y * 0.1,
+                        MouseScrollDelta::PixelDelta(delta) => 0.01 * delta.y as f32,
+                        MouseScrollDelta::LineDelta(_, y) => y,
                     };
-                    camera.zoom(delta);
+                    if left_mouse_button_pressed {
+                        camera.focus(delta, 0.1);
+                    } else {
+                        camera.zoom(delta, -1.0);
+                    }
                     renderer.reset_samples();
+                    camera.update_uniforms();
                 }
                 DeviceEvent::MouseMotion { delta: (dx, dy) } => {
-                    let dx = dx as f32 * 0.01;
-                    let dy = dy as f32 * -0.01;
+                    let dx = dx as f32;
+                    let dy = dy as f32;
                     if left_mouse_button_pressed {
-                        camera.orbit(dx, dy);
+                        camera.update_lookat(dx, dy);
                         renderer.reset_samples();
+                        camera.update_uniforms();
                     }
                     if right_mouse_button_pressed {
-                        camera.pan(dx, dy);
+                        camera.apeture(dx, 0.001);
                         renderer.reset_samples();
+                        camera.update_uniforms();
                     }
                 }
                 DeviceEvent::Button { button, state, .. } => {
@@ -89,6 +102,49 @@ async fn main() -> Result<()> {
                         _ => (),
                     }
                 }
+                DeviceEvent::Key(RawKeyEvent {
+                    physical_key: key,
+                    state,
+                }) => {
+                    if state == ElementState::Pressed {
+                        match key {
+                            PhysicalKey::Code(KeyCode::KeyW) => {
+                                camera.translate(Direction::Forward, 0.1);
+                                renderer.reset_samples();
+                                camera.update_uniforms();
+                            }
+                            PhysicalKey::Code(KeyCode::KeyA) => {
+                                camera.translate(Direction::Left, 0.1);
+                                renderer.reset_samples();
+                                camera.update_uniforms();
+                            }
+                            PhysicalKey::Code(KeyCode::KeyS) => {
+                                camera.translate(Direction::Backward, 0.1);
+                                renderer.reset_samples();
+                                camera.update_uniforms();
+                            }
+                            PhysicalKey::Code(KeyCode::KeyD) => {
+                                camera.translate(Direction::Right, 0.1);
+                                renderer.reset_samples();
+                                camera.update_uniforms();
+                            }
+                            PhysicalKey::Code(KeyCode::Space) => {
+                                camera.translate(Direction::Up, 0.1);
+                                renderer.reset_samples();
+                                camera.update_uniforms();
+                            }
+                            PhysicalKey::Code(KeyCode::ControlLeft) => {
+                                camera.translate(Direction::Down, 0.1);
+                                renderer.reset_samples();
+                                camera.update_uniforms();
+                            }
+                            PhysicalKey::Code(KeyCode::ShiftLeft) => todo!(),
+                            PhysicalKey::Code(KeyCode::ControlLeft) => todo!(),
+                            _ => (),
+                        }
+                    }
+                }
+
                 _ => (),
             },
             _ => (),

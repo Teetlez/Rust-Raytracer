@@ -33,10 +33,14 @@ struct Uniforms {
 }
 
 struct CameraUniforms {
-    origin: vec3f,
-    u: vec3f,
-    v: vec3f,
-    w: vec3f,
+    // origin of the camera
+    eye: vec3f,
+    // (u, v, w camera coordinates)
+    uvw: mat3x3f,
+    // (horizontal, vertical, corner viewport coords)
+    hvc: mat3x3f,
+    // (focus radius, focus distance)
+    lens_rd: vec2f,
 }
 
 struct Rng {
@@ -115,13 +119,15 @@ fn gen2_qrng(seed: u32) -> vec2f {
     return vec2f(x, y);
 }
 
-fn gen_qrng_disk(seed: u32) -> vec2f {
+fn gen_qrng_disk(seed: u32, rad: f32) -> vec2f {
     let rand = gen2_qrng(seed);
     let a = (2.0 * rand.x) - 1.0;
     let b = (2.0 * rand.y) - 1.0;
+    let c = (PI / 4.0) * (b / max(a, EPSILON));
+    let d = (PI / 2.0) - ((PI / 4.0) * (a / max(b, EPSILON)));
     let comp = (a * a) > (b * b);
-    let radius = select(a, b, comp);
-    let phi = select((PI / 4.0) * (b / a), (PI / 2.0) - ((PI / 4.0) * (a / b)), comp);
+    let radius = rad * select(a, b, comp);
+    let phi = select(c, d, comp);
 
     return vec2f(cos(phi) * radius, sin(phi) * radius);
 }
@@ -270,6 +276,18 @@ fn sky_color(ray: Ray) -> vec3f {
     return (1.0 - t) * vec3(1.0) + t * vec3(0.3, 0.5, 1.0);
 }
 
+// fn gen_ray( width: usize, height: usize, x: f32, y: f32, jx: f32, jy: f32) -> Ray {
+//         let rd: Vec3 = self.lens_rd.0 * random::quasirandom_in_cocentric_disk(jx, jy);
+//         let offset: Vec3 = rd.x * self.uvw[0] + rd.y * self.uvw[1];
+
+//         let s = (x + jy) / (width - 1) as f32;
+//         let t = (y + jx) / (height - 1) as f32;
+//         Ray::new(
+//             self.view.0 + offset,
+//             (self.hvc[2] + (s * self.hvc[0]) + (t * self.hvc[1])) - self.view.0 - offset,
+//         )
+//     }
+
 @group(0) @binding(0)
 var<uniform> uniforms: Uniforms;
 
@@ -278,23 +296,20 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let pixels = vec2u(pos.xy);
     init_rng(pixels);
     let qrng_offset = pcg(pixels.x + pixels.y * uniforms.width) % (uniforms.width * uniforms.height);
-    let blur = gen_qrng_disk(uniforms.frame_num + qrng_offset);
-    let origin = uniforms.camera.origin;
-    let focus_dist = 1.0;
-    let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
+    let blur = gen_qrng_disk(uniforms.frame_num + qrng_offset, uniforms.camera.lens_rd.x);
+    let jitter = gen2_qrng(uniforms.frame_num / 15) - 0.5;
 
+    let aspect_ratio = f32(uniforms.width) / f32(uniforms.height * 2);
+
+    let offset = (blur.x * uniforms.camera.uvw[0]) + (blur.y * uniforms.camera.uvw[1]);
+    let origin = uniforms.camera.eye + offset;
+    var uv = (pos.xy + jitter) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
     // Offset and normalize the viewport coordinates of the ray.
-    var uv = (pos.xy + (gen2_qrng(uniforms.frame_num) - 0.5)) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
-
-    // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
     uv = (2.0 * uv - vec2(1.0)) * vec2(aspect_ratio, - 1.0);
+    let hvc = ((uniforms.camera.hvc[2] + (uv.x * uniforms.camera.hvc[0]) + (uv.y * uniforms.camera.hvc[1])));
+    let ray_dir = normalize(hvc - origin);
 
-    // Compute the scene-space ray direction by rotating the camera-space vector into a new
-    // basis.
-    let camera_rotation = mat3x3(uniforms.camera.u, uniforms.camera.v, uniforms.camera.w);
-    let direction = camera_rotation * vec3(uv, focus_dist);
-
-    var ray = Ray(origin, direction);
+    var ray = Ray(origin, ray_dir);
     var throughput = vec3f(1.);
     var radiance_sample = vec3(0.);
 
@@ -329,5 +344,26 @@ fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
     // Display the average after gamma correction (gamma = 2.2)
     let color = new_sum / f32(uniforms.frame_num);
+    // return aces_tonemap(color, 2.2);
+
     return vec4(pow(color, vec3(1. / 2.2)), 1.);
+
+}
+
+// Tonemapping constants
+const M1: mat3x3f = mat3x3(//
+vec3(0.59719, 0.07600, 0.02840), //
+vec3(0.35458, 0.90834, 0.13383), //
+vec3(0.04823, 0.01566, 0.83777),);
+const M2: mat3x3f = mat3x3(//
+vec3(1.60475, - 0.10208, - 0.00327), //
+vec3(- 0.53108, 1.10813, - 0.07276), //
+vec3(- 0.07367, - 0.00605, 1.07602),);
+
+fn aces_tonemap(color: vec3f, gamma: f32) -> vec4f {
+    let v = M1 * color;
+    let a = v * (v + vec3(0.0235786)) - vec3(0.000090537);
+    let b = v * (0.983729 * v + vec3(0.332951)) + vec3(0.238081);
+    let c = clamp((M2 * (a / b)), vec3(0.0), vec3(1.0));
+    return vec4(pow(c, vec3(1.0 / gamma)), 1.0);
 }

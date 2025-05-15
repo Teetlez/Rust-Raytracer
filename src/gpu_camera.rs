@@ -3,91 +3,115 @@ use {
     std::f32::consts::{FRAC_PI_2, PI},
 };
 
-use ultraviolet::{Vec3, Vec4};
+use ultraviolet::{Rotor3, Vec2, Vec3, Vec4, Vec4x4};
+const SENSETIVITY: f32 = 0.001;
+
+#[derive(Debug, Copy, Clone)]
+pub enum Direction {
+    Forward,
+    Backward,
+    Left,
+    Right,
+    Up,
+    Down,
+}
 
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
 pub struct CameraUniforms {
-    origin: Vec3,
+    eye: Vec3, // origin of the camera
     _pad0: u32,
-    u: Vec3,
-    _pad1: u32,
-    v: Vec3,
-    _pad2: u32,
-    w: Vec3,
-    _pad3: u32,
+    uvw: [Vec4; 3], // (u, v, w camera coordinates)
+    hvc: [Vec4; 3], // (horizontal, vertical, corner viewport coords)
+    lens_rd: Vec2,  // (focus radius, focus distance)
+    _pad1: Vec2,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Camera {
     uniforms: CameraUniforms,
-    center: Vec3,
-    up: Vec3,
-    distance: f32,
-    azimuth: f32,
-    altitude: f32,
+    eye: Vec3,
+    lookat: Vec3,
+    vup: Vec3,
+    fov: f32,
+    aspect_ratio: f32,
+    apeture: f32,
+    focus_dist: f32,
 }
 
 impl Camera {
-    pub fn look_at(origin: Vec3, center: Vec3, up: Vec3) -> Camera {
-        let center_to_origin = origin - center;
-        let distance = center_to_origin.mag().max(0.01); // Prevent distance of 0
-        let neg_w = center_to_origin.normalized();
-        let azimuth = neg_w.x.atan2(neg_w.z);
-        let altitude = neg_w.y.asin();
-        Self::with_spherical_coords(center, up, distance, azimuth, altitude)
-    }
-
-    pub fn with_spherical_coords(
-        center: Vec3,
-        up: Vec3,
-        distance: f32,
-        azimuth: f32,
-        altitude: f32,
+    pub fn new(
+        eye: Vec3,
+        lookat: Vec3,
+        vup: Vec3,
+        fov: f32,
+        aspect_ratio: f32,
+        apeture: f32,
+        focus_dist: f32,
     ) -> Camera {
-        let mut camera = Camera {
+        Camera {
             uniforms: CameraUniforms::zeroed(),
-            center,
-            up,
-            distance,
-            azimuth,
-            altitude,
-        };
-        camera.calculate_uniforms();
-        camera
+            eye,
+            lookat,
+            vup,
+            fov,
+            aspect_ratio,
+            apeture,
+            focus_dist,
+        }
     }
 
     pub fn uniforms(&self) -> &CameraUniforms {
         &self.uniforms
     }
-    pub fn zoom(&mut self, displacement: f32) {
-        self.distance = (self.distance - displacement).max(0.0); // Prevent negative distance
-        self.uniforms.origin = self.center - self.distance * self.uniforms.w;
-    }
-    pub fn pan(&mut self, du: f32, dv: f32) {
-        let pan = du * self.uniforms.u + dv * self.uniforms.v;
-        self.uniforms.origin += pan;
+
+    pub fn update_uniforms(&mut self) {
+        // Camera setup
+        let h = (self.fov.to_radians() / 2.0).tan();
+        let viewport_height: f32 = 2.0 * h;
+        let viewport_width: f32 = self.aspect_ratio * viewport_height;
+
+        let w = self.lookat.normalized();
+        let u = self.vup.cross(w).normalized();
+        let v = w.cross(u);
+
+        let horizontal = self.focus_dist * viewport_width * u;
+        let vertical = self.focus_dist * viewport_height * v;
+        let lower_left_corner =
+            self.eye - (horizontal / 2.0) - (vertical / 2.0) - self.focus_dist * w;
+        self.uniforms.eye = self.eye.into();
+        self.uniforms.uvw = [u.into(), v.into(), w.into()];
+        self.uniforms.hvc = [horizontal.into(), vertical.into(), lower_left_corner.into()];
+        self.uniforms.lens_rd = Vec2::new(self.apeture / 2.0, self.focus_dist);
     }
 
-    pub fn orbit(&mut self, du: f32, dv: f32) {
-        const MAX_ALT: f32 = FRAC_PI_2 - 1e-6;
-        self.altitude = (self.altitude + dv).clamp(-MAX_ALT, MAX_ALT);
-        self.azimuth += du;
-        self.azimuth %= 2. * PI;
-        self.calculate_uniforms();
-    }
-
-    fn calculate_uniforms(&mut self) {
-        let w = {
-            let (y, xz_scale) = self.altitude.sin_cos();
-            let (x, z) = self.azimuth.sin_cos();
-            -Vec3::new(x * xz_scale, y, z * xz_scale)
+    pub fn translate(&mut self, dir: Direction, speed: f32) {
+        let (sign, axis) = match dir {
+            Direction::Left => (-1.0, 0),
+            Direction::Right => (1.0, 0),
+            Direction::Down => (-1.0, 1),
+            Direction::Up => (1.0, 1),
+            Direction::Forward => (-1.0, 2),
+            Direction::Backward => (1.0, 2),
         };
-        let origin = self.center - self.distance * w;
-        let u = w.cross(self.up).normalized();
-        let v = u.cross(w);
-        self.uniforms.origin = origin;
-        self.uniforms.u = u;
-        self.uniforms.v = v;
-        self.uniforms.w = w;
+        let delta = (sign * self.uniforms.uvw[axis] * speed).truncated();
+        self.eye += delta;
+    }
+
+    pub fn update_lookat(&mut self, du: f32, dv: f32) {
+        let turn = Rotor3::from_euler_angles(0.0, -dv * SENSETIVITY, -du * SENSETIVITY);
+        self.lookat = (self.lookat.rotated_by(turn)).normalized();
+    }
+
+    pub fn zoom(&mut self, delta: f32, scale: f32) {
+        self.fov += delta * 0.83333336 * scale;
+    }
+
+    pub fn focus(&mut self, delta: f32, scale: f32) {
+        self.focus_dist += delta * scale;
+    }
+
+    pub fn apeture(&mut self, delta: f32, scale: f32) {
+        self.apeture += delta * scale;
     }
 }
