@@ -1,6 +1,5 @@
 use crate::gpu_camera::{Camera, CameraUniforms};
 use bytemuck::{Pod, Zeroable};
-use ultraviolet::Vec3;
 use wgpu::PipelineCompilationOptions;
 
 pub struct PathTracer {

@@ -1,9 +1,14 @@
 // Originally written in 2023 by Arman Uguray <arman.uguray@gmail.com>
 // SPDX-License-Identifier: CC-BY-4.0
 
+use radiant::load;
+use std::fs::File;
+use std::io::BufReader;
+
 use {
     anyhow::{Context, Result},
     gpu_camera::{Camera, Direction},
+    std::collections::HashSet,
     ultraviolet::Vec3,
     winit::{
         event::{DeviceEvent, ElementState, Event, MouseScrollDelta, RawKeyEvent, WindowEvent},
@@ -30,19 +35,68 @@ async fn main() -> Result<()> {
         .with_title("GPU Path Tracer".to_string());
     let window = event_loop.create_window(window_att)?;
     let (device, queue, surface) = connect_to_gpu(&window).await?;
+
+    let file = File::open("assets/your_hdr_image.hdr")?;
+    let reader = BufReader::new(file);
+    let image = load(reader)?;
+
+    let texture_size = wgpu::Extent3d {
+        width: image.width as u32,
+        height: image.height as u32,
+        depth_or_array_layers: 1,
+    };
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("HDR Texture"),
+        size: texture_size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba16Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    let mut rgba_data = Vec::with_capacity((image.width * image.height * 4) as usize);
+    for pixel in &image.data {
+        rgba_data.push(pixel.r);
+        rgba_data.push(pixel.g);
+        rgba_data.push(pixel.b);
+        rgba_data.push(1.0); // Alpha channel
+    }
+
+    queue.write_texture(
+        wgpu::ImageCopyTexture {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        bytemuck::cast_slice(&rgba_data),
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some((4 * 2 * image.width).try_into().unwrap()), // 4 channels * 2 bytes per channel
+            rows_per_image: Some(image.height.try_into().unwrap()),
+        },
+        texture_size,
+    );
+
     let mut renderer = gpu_render::PathTracer::new(device, queue, WIDTH, HEIGHT);
     let mut camera = Camera::new(
-        Vec3::new(0.0, 0.75, -3.0),
+        Vec3::new(0.0, 0.75, -5.0),
         Vec3::new(0.0, -0.25, -1.0),
         Vec3::unit_y(),
-        20.0,
+        10.0,
         (WIDTH as f32) / (HEIGHT as f32),
         0.1,
-        3.0,
+        5.0,
     );
     camera.update_uniforms();
     let mut left_mouse_button_pressed = false;
     let mut right_mouse_button_pressed = false;
+    let mut speed = 1.0;
+    let mut move_queue: HashSet<Direction> = HashSet::new();
+    let mut dirty = true;
 
     event_loop.run(|event, control_handle| {
         control_handle.set_control_flow(ControlFlow::Poll);
@@ -58,8 +112,16 @@ async fn main() -> Result<()> {
                     let render_target = frame
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default());
+                    if dirty || !move_queue.is_empty() {
+                        move_queue
+                            .iter()
+                            .for_each(|dir| camera.translate(*dir, speed * 0.1));
+                        camera.update_uniforms();
+                        renderer.reset_samples();
+                    }
 
                     renderer.render_frame(&camera, &render_target);
+                    dirty = false;
 
                     frame.present();
                     window.request_redraw();
@@ -77,21 +139,18 @@ async fn main() -> Result<()> {
                     } else {
                         camera.zoom(delta, -1.0);
                     }
-                    renderer.reset_samples();
-                    camera.update_uniforms();
+                    dirty = true;
                 }
                 DeviceEvent::MouseMotion { delta: (dx, dy) } => {
                     let dx = dx as f32;
                     let dy = dy as f32;
                     if left_mouse_button_pressed {
                         camera.update_lookat(dx, dy);
-                        renderer.reset_samples();
-                        camera.update_uniforms();
+                        dirty = true;
                     }
                     if right_mouse_button_pressed {
                         camera.apeture(dx, 0.001);
-                        renderer.reset_samples();
-                        camera.update_uniforms();
+                        dirty = true;
                     }
                 }
                 DeviceEvent::Button { button, state, .. } => {
@@ -106,54 +165,40 @@ async fn main() -> Result<()> {
                     physical_key: key,
                     state,
                 }) => {
-                    if state == ElementState::Pressed {
-                        match key {
-                            PhysicalKey::Code(KeyCode::KeyW) => {
-                                camera.translate(Direction::Forward, 0.1);
-                                renderer.reset_samples();
-                                camera.update_uniforms();
-                            }
-                            PhysicalKey::Code(KeyCode::KeyA) => {
-                                camera.translate(Direction::Left, 0.1);
-                                renderer.reset_samples();
-                                camera.update_uniforms();
-                            }
-                            PhysicalKey::Code(KeyCode::KeyS) => {
-                                camera.translate(Direction::Backward, 0.1);
-                                renderer.reset_samples();
-                                camera.update_uniforms();
-                            }
-                            PhysicalKey::Code(KeyCode::KeyD) => {
-                                camera.translate(Direction::Right, 0.1);
-                                renderer.reset_samples();
-                                camera.update_uniforms();
-                            }
-                            PhysicalKey::Code(KeyCode::Space) => {
-                                camera.translate(Direction::Up, 0.1);
-                                renderer.reset_samples();
-                                camera.update_uniforms();
-                            }
-                            PhysicalKey::Code(KeyCode::ControlLeft) => {
-                                camera.translate(Direction::Down, 0.1);
-                                renderer.reset_samples();
-                                camera.update_uniforms();
-                            }
-                            PhysicalKey::Code(KeyCode::ShiftLeft) => todo!(),
-                            PhysicalKey::Code(KeyCode::ControlLeft) => todo!(),
-                            _ => (),
+                    let pressed = state == ElementState::Pressed;
+                    let dir = match key {
+                        PhysicalKey::Code(KeyCode::KeyW) => Some(Direction::Forward),
+                        PhysicalKey::Code(KeyCode::KeyA) => Some(Direction::Left),
+                        PhysicalKey::Code(KeyCode::KeyS) => Some(Direction::Backward),
+                        PhysicalKey::Code(KeyCode::KeyD) => Some(Direction::Right),
+                        PhysicalKey::Code(KeyCode::Space) => Some(Direction::Up),
+                        PhysicalKey::Code(KeyCode::ControlLeft) => Some(Direction::Down),
+                        _ => None,
+                    };
+                    if let Some(dir) = dir {
+                        if pressed {
+                            move_queue.insert(dir);
+                        } else {
+                            move_queue.remove(&dir);
                         }
+                    } else {
+                        speed = if key == PhysicalKey::Code(KeyCode::ShiftLeft) && pressed {
+                            3.0
+                        } else {
+                            1.0
+                        };
                     }
                 }
-
                 _ => (),
             },
+
             _ => (),
         }
     })?;
     Ok(())
 }
 
-async fn connect_to_gpu(window: &Window) -> Result<(wgpu::Device, wgpu::Queue, wgpu::Surface)> {
+async fn connect_to_gpu(window: &Window) -> Result<(wgpu::Device, wgpu::Queue, wgpu::Surface<'_>)> {
     use wgpu::TextureFormat::{Bgra8Unorm, Rgba8Unorm};
 
     // Create an "instance" of wgpu. This is the entry-point to the API.

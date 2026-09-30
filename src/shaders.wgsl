@@ -9,7 +9,7 @@ const OBJECT_COUNT: u32 = 4;
 alias Scene = array<Sphere, OBJECT_COUNT>;
 alias Materials = array<Material, OBJECT_COUNT>;
 
-var<private> materials: Materials = Materials(Material(vec3(0.7, 0.5, 0.5), 1.), Material(vec3(0.5, 0.5, 0.9), 0.), Material(vec3(0.7, 0.9, 0.2), 0.), Material(vec3(1.), - (1.5)),);
+var<private> materials: Materials = Materials(Material(vec3(0.8, 0.2, 0.4), 1.), Material(vec3(0.54, 0.57, 0.86), 0.), Material(vec3(0.7, 0.9, 0.2), 0.), Material(vec3(1.), - (1.5)),);
 
 var<private> scene: Scene = Scene(Sphere(vec3(- 1.1, 0.5, 0.), 0.5, 0), Sphere(vec3(0., 0.5, 0.), 0.5, 3), Sphere(vec3(1.1, 0.5, 0.), 0.5, 1), Sphere(vec3(0., - 2e2 - EPSILON, 0.), 2e2, 2),);
 @group(0) @binding(1)
@@ -212,6 +212,9 @@ fn schlick(cosine: f32, ior: f32) -> f32 {
     r0 *= r0;
     return clamp(r0 + (1 - r0) * (pow * pow * pow * pow * pow * pow), 0.0, 1.0);
 }
+                // let cosine = (-ray.dir).dot(jittered_normal);
+                // (self.albedo + (Vec3::one() - self.albedo) * (1.0 - cosine).powi(5))
+                //     .clamped(Vec3::zero(), Vec3::one())
 
 fn scatter(input_ray: Ray, hit: Hit, material: Material) -> Scatter {
     let incident = normalize(input_ray.dir);
@@ -228,15 +231,20 @@ fn scatter(input_ray: Ray, hit: Hit, material: Material) -> Scatter {
     let cannot_refract = ref_ratio * ref_ratio * (1.0 - cos_theta * cos_theta) > 1.;
 
     var scattered: vec3f;
-    let attenuation = material.color * 0.9;
+    var attenuation: vec3f;
+    var power: f32;
     if is_specular || (is_transmissive && cannot_refract) || (is_transmissive && schlick(cos_theta, ior) > gen1_qrng(uniforms.frame_num)) {
         scattered = reflect(incident, N);
+        let pow = (1 - cos_theta);
+        attenuation = clamp(material.color + (vec3(1.0) - material.color) * (pow * pow * pow * pow * pow), vec3(0.0), vec3(1.0));
     }
     else if is_transmissive {
         scattered = refract(incident, N, ref_ratio);
+        attenuation = material.color * 0.99;
     }
     else {
         scattered = sample_lambertian(N);
+        attenuation = material.color * 0.9;
     }
     let output_ray = Ray(point_on_ray(input_ray, hit.t), normalize(scattered));
     return Scatter(attenuation, output_ray);
@@ -273,7 +281,7 @@ struct Material {
 
 fn sky_color(ray: Ray) -> vec3f {
     let t = 0.5 * (normalize(ray.dir).y + 1.0);
-    return (1.0 - t) * vec3(1.0) + t * vec3(0.3, 0.5, 1.0);
+    return (1.0 - t) * vec3(2.0) + t * vec3(0.3, 0.5, 1.0);
 }
 
 // fn gen_ray( width: usize, height: usize, x: f32, y: f32, jx: f32, jy: f32) -> Ray {

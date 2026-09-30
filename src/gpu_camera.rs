@@ -1,12 +1,9 @@
-use {
-    bytemuck::{Pod, Zeroable},
-    std::f32::consts::{FRAC_PI_2, PI},
-};
+use bytemuck::{Pod, Zeroable};
 
-use ultraviolet::{Rotor3, Vec2, Vec3, Vec4, Vec4x4};
+use ultraviolet::{Rotor3, Vec2, Vec3, Vec4};
 const SENSETIVITY: f32 = 0.001;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Hash)]
 pub enum Direction {
     Forward,
     Backward,
