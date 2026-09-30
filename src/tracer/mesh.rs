@@ -4,7 +4,10 @@ use crate::material::Material;
 
 use ultraviolet::{Rotor3, Vec3};
 
-use super::{primitive::{GpuPrimitiveSource, ScenePrimitive}, triangle::Triangle};
+use super::{
+    primitive::{GpuPrimitiveSource, ScenePrimitive},
+    triangle::Triangle,
+};
 
 #[derive(Clone)]
 pub struct Mesh {
@@ -42,12 +45,7 @@ impl Mesh {
             });
             rot.rotate_vecs(&mut normals);
 
-            triangles.push(Triangle::new(
-                vertices,
-                normals,
-                !cull_backface,
-                material,
-            ));
+            triangles.push(Triangle::new(vertices, normals, !cull_backface, material));
         }
         Mesh { triangles }
     }

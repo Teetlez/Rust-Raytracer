@@ -59,12 +59,8 @@ impl Cube {
         Self {
             axis_box: ABox::new(center, size, material),
             center: Vec3::from(center),
-            rotation: Rotor3::from_euler_angles(
-                rotation.2 * PI,
-                rotation.0 * PI,
-                rotation.1 * PI,
-            )
-            .normalized(),
+            rotation: Rotor3::from_euler_angles(rotation.2 * PI, rotation.0 * PI, rotation.1 * PI)
+                .normalized(),
         }
     }
 }

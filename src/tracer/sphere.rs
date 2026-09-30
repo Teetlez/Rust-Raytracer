@@ -2,9 +2,7 @@ use crate::material::Material;
 
 use ultraviolet::Vec3;
 
-use super::{
-    primitive::{GpuPrimitiveSource, ScenePrimitive},
-};
+use super::primitive::{GpuPrimitiveSource, ScenePrimitive};
 
 #[derive(Copy, Clone)]
 pub struct Sphere {

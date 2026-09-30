@@ -5,7 +5,6 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter, Read},
     path::Path,
-    sync::Arc,
 };
 use ultraviolet::Vec3;
 
@@ -114,7 +113,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<SceneData, Box<dyn s
     } else {
         None
     };
-    let mut world: Vec<Arc<dyn GpuPrimitiveSource + Send + Sync>> = vec![];
+    let mut world: Vec<Box<dyn GpuPrimitiveSource>> = vec![];
     println!("loading objects & materials");
     scene.objects.into_iter().for_each(|obj| {
         let material = match *scene.materials.get(&obj.material).unwrap() {
@@ -132,7 +131,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<SceneData, Box<dyn s
 
         match obj.shape {
             Shape::Sphere(position, radius) => {
-                world.push(Arc::new(Sphere::new(
+                world.push(Box::new(Sphere::new(
                     position,
                     radius.unwrap_or(1.0),
                     material,
@@ -145,21 +144,21 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<SceneData, Box<dyn s
                     Vec3::from(vertices.2),
                 ];
                 let normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[0]);
-                world.push(Arc::new(Triangle::new(
+                world.push(Box::new(Triangle::new(
                     vertices,
                     [normal; 3],
                     true,
                     material,
                 )));
             }
-            Shape::Box(position, size, rotation) => world.push(Arc::new(Cube::new(
+            Shape::Box(position, size, rotation) => world.push(Box::new(Cube::new(
                 position,
                 size.unwrap_or((1.0, 1.0, 1.0)),
                 rotation.unwrap_or((0.0, 0.0, 0.0)),
                 material,
             ))),
             Shape::AxisBox(position, size) => {
-                world.push(Arc::new(ABox::new(
+                world.push(Box::new(ABox::new(
                     position,
                     size.unwrap_or((1.0, 1.0, 1.0)),
                     material,
@@ -176,9 +175,9 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<SceneData, Box<dyn s
                     },
                 )
                 .expect("failed to load file");
-                let mut meshes: Vec<Arc<dyn GpuPrimitiveSource + Send + Sync>> = Vec::new();
+                let mut meshes: Vec<Box<dyn GpuPrimitiveSource>> = Vec::new();
                 models.iter().for_each(|model| {
-                    meshes.push(Arc::new(Mesh::new(
+                    meshes.push(Box::new(Mesh::new(
                         &model.mesh,
                         Vec3::from(translation.unwrap_or((0.0, 0.0, 0.0))),
                         Vec3::from(scale.unwrap_or((1.0, 1.0, 1.0))),
@@ -218,9 +217,9 @@ pub fn random_scene(
     metal: bool,
     glass: bool,
 ) -> GpuScene {
-    let mut world: Vec<Arc<dyn GpuPrimitiveSource + Send + Sync>> = vec![];
+    let mut world: Vec<Box<dyn GpuPrimitiveSource>> = vec![];
     let ground: Material = Material::glossy((0.55, 0.53, 0.56), 0.1, 0.7);
-    world.push(Arc::new(ABox::new(
+    world.push(Box::new(ABox::new(
         (-2.0, -0.5, -2.0),
         (50.0, 1.0, 50.0),
         ground,
@@ -244,14 +243,14 @@ pub fn random_scene(
                     );
                     if glossy && choose_mat < 0.3 {
                         // glossy
-                        world.push(Arc::new(Sphere::new(
+                        world.push(Box::new(Sphere::new(
                             center,
                             0.2,
                             Material::glossy(albedo, fastrand::f32() + 0.5, fastrand::f32() * 0.5),
                         )));
                     } else if diffuse && choose_mat < 0.6 {
                         // diffuse
-                        world.push(Arc::new(Sphere::new(
+                        world.push(Box::new(Sphere::new(
                             center,
                             0.2,
                             Material::lambertian(albedo),
@@ -259,14 +258,14 @@ pub fn random_scene(
                     } else if metal && choose_mat < 0.8 {
                         // metal
                         let fuzz = 0.5 * fastrand::f32();
-                        world.push(Arc::new(Sphere::new(
+                        world.push(Box::new(Sphere::new(
                             center,
                             0.2,
                             Material::metal((albedo.0, albedo.1, albedo.2), fuzz),
                         )));
                     } else if lights && choose_mat < 0.9 {
                         // lights
-                        world.push(Arc::new(Sphere::new(
+                        world.push(Box::new(Sphere::new(
                             center,
                             0.2,
                             Material::lambertian((
@@ -277,7 +276,7 @@ pub fn random_scene(
                         )));
                     } else if glass {
                         // glass
-                        world.push(Arc::new(Sphere::new(
+                        world.push(Box::new(Sphere::new(
                             center,
                             0.2,
                             Material::dielectric(
@@ -297,10 +296,10 @@ pub fn random_scene(
     let steel = Material::metal((0.7, 0.5, 0.3), 0.025);
     // let diffuse = Material::lambertian((0.4, 0.2, 0.1));
 
-    world.push(Arc::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));
-    world.push(Arc::new(Sphere::new((0.0, 1.0, 0.0), 1.0, glass)));
-    world.push(Arc::new(Sphere::new((-4.0, 1.0, 0.0), 1.0, gloss)));
-    // world.push(Arc::new(Sphere::new((-4.5, 1.0, 0.0), 1.0, diffuse)));
+    world.push(Box::new(Sphere::new((4.0, 1.0, 0.0), 1.0, steel)));
+    world.push(Box::new(Sphere::new((0.0, 1.0, 0.0), 1.0, glass)));
+    world.push(Box::new(Sphere::new((-4.0, 1.0, 0.0), 1.0, gloss)));
+    // world.push(Box::new(Sphere::new((-4.5, 1.0, 0.0), 1.0, diffuse)));
 
     let mut primitives = Vec::new();
     for object in &world {

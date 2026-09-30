@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn empty_bvh_has_a_terminating_leaf() {
-        let scene = GpuScene::from_cpu_primitives(Vec::new());
+        let scene = GpuScene::from_primitives(Vec::new());
 
         assert_eq!(scene.nodes.len(), 1);
         assert_eq!(scene.nodes[0].links[0], u32::MAX);
