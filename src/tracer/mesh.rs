@@ -29,7 +29,7 @@ impl Mesh {
     ) -> Mesh {
         let mut mesh: Vec<Arc<dyn Hittable + Send + Sync>> = Vec::new();
         let rot = Rotor3::from_euler_angles(rotation.z, rotation.x, rotation.y).normalized();
-        polygons.indices.chunks_exact(3).for_each(|face| {
+        polygons.indices.as_chunks::<3>().0.iter().for_each(|face| {
             let vertices: [Vec3; 3] = [
                 Vec3::new(
                     polygons.positions[3 * face[0] as usize],
@@ -88,11 +88,15 @@ impl Mesh {
 }
 
 impl Hittable for Mesh {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         self.bvh.hit(ray, t_min, t_max)
     }
 
     fn bounding_box(&self) -> Aabb {
         *self.bvh.aabb_box
+    }
+
+    fn append_gpu_primitives(&self, primitives: &mut Vec<super::hittable::ScenePrimitive>) {
+        self.bvh.append_gpu_primitives(primitives);
     }
 }

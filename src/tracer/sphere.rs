@@ -4,7 +4,7 @@ use ultraviolet::Vec3;
 
 use super::{
     cube::Aabb,
-    hittable::{HitRecord, Hittable},
+    hittable::{HitRecord, Hittable, ScenePrimitive},
 };
 
 #[derive(Copy, Clone)]
@@ -25,7 +25,7 @@ impl Sphere {
 }
 impl Hittable for Sphere {
     #[inline]
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         let oc = ray.pos - self.center;
         let half_b = oc.dot(ray.dir);
         let disc = half_b.powi(2) - (oc.mag_sq() - (self.radius.powi(2)));
@@ -62,5 +62,13 @@ impl Hittable for Sphere {
             min: self.center - Vec3::one() * self.radius.abs(),
             max: self.center + Vec3::one() * self.radius.abs(),
         }
+    }
+
+    fn append_gpu_primitives(&self, primitives: &mut Vec<ScenePrimitive>) {
+        primitives.push(ScenePrimitive::Sphere {
+            center: self.center,
+            radius: self.radius,
+            material: self.material,
+        });
     }
 }

@@ -238,19 +238,19 @@ impl Renderer {
                             pixel_color += match mode {
                                 Mode::Normals => normals_only(
                                     self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                    &world_bvh,
-                                    &hdr,
+                                    world_bvh,
+                                    hdr,
                                 ),
                                 Mode::Colors => colors_only(
                                     self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                    &world_bvh,
-                                    &hdr,
+                                    world_bvh,
+                                    hdr,
                                 ),
                                 Mode::Image => ray_color(
                                     self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                    &world_bvh,
+                                    world_bvh,
                                     self.max_bounce,
-                                    &hdr,
+                                    hdr,
                                     self.light_clamp,
                                 ),
                             };
@@ -299,18 +299,18 @@ impl Renderer {
                         match mode {
                             Mode::Normals => normals_only(
                                 self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                &world_bvh,
-                                &hdr,
+                                world_bvh,
+                                hdr,
                             ),
                             Mode::Colors => colors_only(
                                 self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                &world_bvh,
-                                &hdr,
+                                world_bvh,
+                                hdr,
                             ),
                             Mode::Image => no_bounce(
                                 self.camera.gen_ray(self.width, self.height, x, y, jx, jy),
-                                &world_bvh,
-                                &hdr,
+                                world_bvh,
+                                hdr,
                             ),
                         }
                     })

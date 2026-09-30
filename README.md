@@ -9,7 +9,7 @@ Small, personal pathtracer project written in rust.
 - Support for lambertian, glossy, metallic, and dielectric materials
 - Support for spheres, rectangles, triangles, and .obj files
 - Customizable settings via command line
-- Initial preview window before rendering
+- Progressive GPU rendering with interactive camera controls
 - Saving final render to png
 - Custom scences via a .ron config file
 - HDR environment lighting
@@ -25,7 +25,7 @@ Small, personal pathtracer project written in rust.
 - [ ] Planars
 - [ ] BSDF
 - [ ] Textures + normal maps
-- [ ] GPU support
+- [X] GPU support
 - [ ] Next Event Estimation
 - [ ] Denoising
 
@@ -37,17 +37,20 @@ Arguments:
   [SCENE]  Scene file to use
 
 Options:
-  -s, --samples <SAMPLES>          Number of samples per pixel [default: 128]
-  -p, --passes <PASSES>            Number of frames to cumulate [default: 64]
+  -s, --samples <SAMPLES>          Samples per pixel per pass [default: 128]
+  -p, --passes <PASSES>            Number of passes to cumulate [default: 64]
   -b, --bounces <BOUNCES>          Max number of times a ray can bounce [default: 8]
-      --width <WIDTH>              Pixel width of frame [default: 640]
-      --height <HEIGHT>            Pixel hight of frame [default: 480]
+            --width <WIDTH>              Pixel width of frame [default: 600]
+            --height <HEIGHT>             Pixel height of frame [default: 400]
   -g, --gamma <GAMMA>              Gamma level [default: 2.2]
   -l, --light-clamp <LIGHT_CLAMP>  Max light brightness [default: inf]
-  -f, --filter                     apply bilateral filter after render to reduce noise
+    -f, --filter                     Enable the bilateral filter
   -h, --help                       Print help
   -V, --version                    Print version
 ```
+
+Scene paths are positional, for example `rust_raytracer.exe scene/example/teapot.ron`. The GPU renderer starts in setup mode with one sample per pass and at most one bounce; press `Tab` to toggle full render quality. Press `1` for the path-traced image, `2` for material colors, or `3` for normals. Frame CPU submission timings are printed to the terminal during redraws. Hold the left mouse button and drag to look around, use the wheel to zoom, hold the left button while scrolling to adjust focus, and hold the right button while dragging to change aperture. Move with `W`, `A`, `S`, `D`, `Space`, and `Left Ctrl`; hold `Left Shift` to move faster. Press `F` to toggle the bilateral filter. Press `Enter` or `P` to save the current image as a PNG in `output/` and close the window.
+
 ### Example scene file
 
 ```

@@ -49,6 +49,17 @@ impl Camera {
         }
     }
 
+    pub fn gpu_parameters(&self) -> (Vec3, Vec3, f32, f32, f32, f32) {
+        (
+            self.view.0,
+            (self.view.1 - self.view.0).normalized(),
+            self.view.2,
+            self.aspect_ratio,
+            self.lens_rd.0 * 2.0,
+            self.lens_rd.1,
+        )
+    }
+
     #[inline]
     pub fn gen_ray(&self, width: usize, height: usize, x: f32, y: f32, jx: f32, jy: f32) -> Ray {
         let rd: Vec3 = self.lens_rd.0 * random::quasirandom_in_cocentric_disk(jx, jy);

@@ -4,7 +4,7 @@ use crate::ray::Ray;
 
 use super::{
     cube::Aabb,
-    hittable::{HitRecord, Hittable},
+    hittable::{HitRecord, Hittable, ScenePrimitive},
 };
 
 pub enum BvhNode {
@@ -20,10 +20,17 @@ impl Hittable for BvhNode {
         }
     }
 
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         match self {
             BvhNode::Branch(branch) => branch.hit(ray, t_min, t_max),
             BvhNode::Leaf(leaf) => leaf.hit(ray, t_min, t_max),
+        }
+    }
+
+    fn append_gpu_primitives(&self, primitives: &mut Vec<ScenePrimitive>) {
+        match self {
+            BvhNode::Branch(branch) => branch.append_gpu_primitives(primitives),
+            BvhNode::Leaf(leaf) => leaf.append_gpu_primitives(primitives),
         }
     }
 }
@@ -140,7 +147,7 @@ impl Bvh {
 }
 
 impl Hittable for Bvh {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         if self
             .aabb_box
             .hit(ray.pos, ray.dir.map(|k| k.recip()), t_min, t_max)
@@ -163,5 +170,14 @@ impl Hittable for Bvh {
     #[inline]
     fn bounding_box(&self) -> Aabb {
         *self.aabb_box
+    }
+
+    fn append_gpu_primitives(&self, primitives: &mut Vec<ScenePrimitive>) {
+        if let Some(left) = &self.left {
+            left.append_gpu_primitives(primitives);
+        }
+        if let Some(right) = &self.right {
+            right.append_gpu_primitives(primitives);
+        }
     }
 }

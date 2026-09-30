@@ -6,7 +6,7 @@ use ultraviolet::Vec3;
 
 use super::{
     cube::Aabb,
-    hittable::{HitRecord, Hittable},
+    hittable::{HitRecord, Hittable, ScenePrimitive},
 };
 
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl Triangle {
 }
 
 impl Hittable for Triangle {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
         let edge1 = self.vertices[1] - self.vertices[0];
         let edge2 = self.vertices[2] - self.vertices[0];
         let h = ray.dir.cross(edge2);
@@ -102,5 +102,14 @@ impl Hittable for Triangle {
                     .max(self.vertices[1].z.max(self.vertices[2].z)),
             ),
         }
+    }
+
+    fn append_gpu_primitives(&self, primitives: &mut Vec<ScenePrimitive>) {
+        primitives.push(ScenePrimitive::Triangle {
+            vertices: self.vertices,
+            normals: self.normals,
+            two_sided: self.two_sided,
+            material: *self.material,
+        });
     }
 }

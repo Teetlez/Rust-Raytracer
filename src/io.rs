@@ -321,8 +321,8 @@ pub fn save_colors_as_image(
     // Set the color type of the PNG to RGB and configure the encoder
     encoder.set_color(Rgb);
     encoder.set_depth(png::BitDepth::Eight);
-    encoder.set_compression(png::Compression::Best);
-    encoder.set_adaptive_filter(png::AdaptiveFilterType::Adaptive);
+    encoder.set_compression(png::Compression::High);
+    encoder.set_filter(png::Filter::Adaptive);
 
     // Encode and write the image data
     let mut writer = encoder.write_header()?;

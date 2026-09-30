@@ -68,7 +68,7 @@ impl Camera {
         let viewport_height: f32 = 2.0 * h;
         let viewport_width: f32 = self.aspect_ratio * viewport_height;
 
-        let w = self.lookat.normalized();
+        let w = -self.lookat.normalized();
         let u = self.vup.cross(w).normalized();
         let v = w.cross(u);
 
@@ -76,7 +76,7 @@ impl Camera {
         let vertical = self.focus_dist * viewport_height * v;
         let lower_left_corner =
             self.eye - (horizontal / 2.0) - (vertical / 2.0) - self.focus_dist * w;
-        self.uniforms.eye = self.eye.into();
+        self.uniforms.eye = self.eye;
         self.uniforms.uvw = [u.into(), v.into(), w.into()];
         self.uniforms.hvc = [horizontal.into(), vertical.into(), lower_left_corner.into()];
         self.uniforms.lens_rd = Vec2::new(self.apeture / 2.0, self.focus_dist);
@@ -101,7 +101,7 @@ impl Camera {
     }
 
     pub fn zoom(&mut self, delta: f32, scale: f32) {
-        self.fov += delta * 0.83333336 * scale;
+        self.fov += delta * 0.833_333_4 * scale;
     }
 
     pub fn focus(&mut self, delta: f32, scale: f32) {
