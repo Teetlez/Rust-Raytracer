@@ -1,6 +1,5 @@
 use crate::tracer::hittable::Hittable;
 use std::f32::consts::PI;
-use std::f32::INFINITY;
 use std::sync::Arc;
 
 use crate::material::Scatter;
@@ -150,7 +149,7 @@ fn no_bounce(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
                 .scatter(ray, hit, fastrand::f32(), fastrand::f32())
                 .attenuation
     } else {
-        get_sky(ray, image, INFINITY)
+        get_sky(ray, image, f32::INFINITY)
     }
 }
 
@@ -159,7 +158,7 @@ fn normals_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
         (hit.normal + Vec3::one()) * 0.5
     } else {
-        get_sky(ray, image, INFINITY)
+        get_sky(ray, image, f32::INFINITY)
     }
 }
 
@@ -168,7 +167,7 @@ fn colors_only(ray: Ray, world: &Bvh, image: &Option<Image>) -> Vec3 {
     if let Some(hit) = world.hit(&ray, T_MIN, T_MAX) {
         hit.material.color()
     } else {
-        get_sky(ray, image, INFINITY)
+        get_sky(ray, image, f32::INFINITY)
     }
 }
 

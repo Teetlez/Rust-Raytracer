@@ -13,10 +13,11 @@ use std::{
 };
 use ultraviolet::Vec3;
 use winit::{
-    event::{DeviceEvent, ElementState, Event, MouseScrollDelta, RawKeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    application::ApplicationHandler,
+    event::{DeviceEvent, ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
-    window::{Window, WindowAttributes},
+    window::{Window, WindowAttributes, WindowId},
 };
 
 #[allow(dead_code)]
@@ -42,7 +43,7 @@ pub struct Args {
     scene: Option<String>,
     #[arg(short, long, default_value_t = 128)]
     pub samples: u32,
-    #[arg(short, long, default_value_t = 64)]
+    #[arg(short, long, default_value_t = 128)]
     pub passes: u32,
     #[arg(short, long, default_value_t = 8)]
     pub bounces: u32,
@@ -58,8 +59,7 @@ pub struct Args {
     pub filter: bool,
 }
 
-#[pollster::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
     let cpu_renderer = if let Some(path) = &args.scene {
         io::load_scene(Path::new(path), &args)
@@ -67,245 +67,357 @@ async fn main() -> Result<()> {
     } else {
         make_default_setup(&args)
     };
-    let gpu_scene = cpu_renderer.world.to_gpu_scene();
-    let (eye, look_direction, fov, aspect_ratio, aperture, focus_dist) =
-        cpu_renderer.camera.gpu_parameters();
-    let width = args.width as u32;
-    let height = args.height as u32;
-
     let event_loop = EventLoop::new()?;
-    let window_size = winit::dpi::PhysicalSize::new(width, height);
-    let window_attributes = WindowAttributes::default()
-        .with_inner_size(window_size)
-        .with_resizable(false)
-        .with_title("GPU Path Tracer");
-    let window = event_loop.create_window(window_attributes)?;
-    let (device, queue, surface) = connect_to_gpu(&window).await?;
-    let format = surface
-        .get_configuration()
-        .context("surface was not configured")?
-        .format;
-    let mut renderer = gpu_render::PathTracer::new(
-        device,
-        queue,
-        width,
-        height,
-        format,
-        &gpu_scene,
-        cpu_renderer.hdr.as_ref().as_ref(),
-        args.bounces,
-        args.samples,
-        args.passes,
-        args.gamma,
-        args.light_clamp,
-    );
-    let mut camera = gpu_camera::Camera::new(
-        eye,
-        look_direction,
-        Vec3::unit_y(),
-        fov,
-        aspect_ratio,
-        aperture,
-        focus_dist,
-    );
-    camera.update_uniforms();
-    let mut filter_enabled = args.filter;
-    renderer.set_filter_enabled(filter_enabled);
-    let mut setup_mode = true;
-    renderer.set_quality(1, 1);
-    println!("setup mode: 1 bounce, 1 sample per pass; press Tab for full render quality");
+    let mut app = GpuApp::new(args, cpu_renderer);
+    event_loop.run_app(&mut app)?;
+    if let Some(error) = app.failure {
+        anyhow::bail!(error);
+    }
+    Ok(())
+}
 
-    let mut left_mouse_button_pressed = false;
-    let mut right_mouse_button_pressed = false;
-    let mut speed = 1.0;
-    let mut move_queue: HashSet<gpu_camera::Direction> = HashSet::new();
-    let mut dirty = true;
-    let mut timing_window_start = Instant::now();
-    let mut frame_time_total = Duration::ZERO;
-    let mut frame_count = 0u32;
-    let mut timing_pending_progress = false;
-    window.request_redraw();
+struct GpuApp {
+    args: Args,
+    scene: Option<render::Renderer>,
+    window: Option<Arc<Window>>,
+    surface: Option<wgpu::Surface<'static>>,
+    renderer: Option<gpu_render::PathTracer>,
+    camera: Option<gpu_camera::Camera>,
+    failure: Option<String>,
+    left_mouse_button_pressed: bool,
+    right_mouse_button_pressed: bool,
+    filter_enabled: bool,
+    setup_mode: bool,
+    speed: f32,
+    move_queue: HashSet<gpu_camera::Direction>,
+    dirty: bool,
+    timing_window_start: Instant,
+    frame_time_total: Duration,
+    frame_count: u32,
+    timing_pending_progress: bool,
+}
 
-    event_loop.run(|event, control_handle| {
-        control_handle.set_control_flow(ControlFlow::Wait);
-        match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => control_handle.exit(),
-                WindowEvent::RedrawRequested => {
-                    let frame_started = Instant::now();
-                    let frame = match surface.get_current_texture() {
-                        wgpu::CurrentSurfaceTexture::Success(frame)
-                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-                        _ => {
-                            window.request_redraw();
-                            return;
-                        }
-                    };
-                    let render_target = frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-                    if dirty || !move_queue.is_empty() {
-                        for direction in &move_queue {
-                            camera.translate(*direction, speed * 0.1);
-                        }
-                        camera.update_uniforms();
-                        renderer.reset_samples();
-                    }
-                    let tracing = renderer.needs_more_samples();
-                    renderer.render_frame(&camera, &render_target);
-                    dirty = false;
-                    renderer.present(frame);
-                    frame_time_total += frame_started.elapsed();
-                    frame_count += 1;
-                    timing_pending_progress |= tracing;
-                    let finished = !renderer.needs_more_samples() && move_queue.is_empty();
-                    if timing_window_start.elapsed() >= Duration::from_secs(1)
-                        || (finished && timing_pending_progress)
+impl GpuApp {
+    fn new(args: Args, scene: render::Renderer) -> Self {
+        Self {
+            filter_enabled: args.filter,
+            args,
+            scene: Some(scene),
+            window: None,
+            surface: None,
+            renderer: None,
+            camera: None,
+            failure: None,
+            left_mouse_button_pressed: false,
+            right_mouse_button_pressed: false,
+            setup_mode: true,
+            speed: 1.0,
+            move_queue: HashSet::new(),
+            dirty: true,
+            timing_window_start: Instant::now(),
+            frame_time_total: Duration::ZERO,
+            frame_count: 0,
+            timing_pending_progress: false,
+        }
+    }
+
+    fn initialize(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
+        let width = self.args.width as u32;
+        let height = self.args.height as u32;
+        let window = Arc::new(
+            event_loop.create_window(
+                WindowAttributes::default()
+                    .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
+                    .with_resizable(false)
+                    .with_title("GPU Path Tracer"),
+            )?,
+        );
+        let scene = self.scene.take().context("scene was already initialized")?;
+        let gpu_scene = scene.world.to_gpu_scene();
+        let (eye, look_direction, fov, aspect_ratio, aperture, focus_dist) =
+            scene.camera.gpu_parameters();
+        let (device, queue, surface) = pollster::block_on(connect_to_gpu(window.clone()))?;
+        let format = surface
+            .get_configuration()
+            .context("surface was not configured")?
+            .format;
+        let mut renderer = gpu_render::PathTracer::new(
+            device,
+            queue,
+            width,
+            height,
+            format,
+            &gpu_scene,
+            scene.hdr.as_ref().as_ref(),
+            self.args.bounces,
+            self.args.samples,
+            self.args.passes,
+            self.args.gamma,
+            self.args.light_clamp,
+        );
+        renderer.set_filter_enabled(self.filter_enabled);
+        renderer.set_quality(1, 1);
+        renderer.set_render_mode(2);
+        let mut camera = gpu_camera::Camera::new(
+            eye,
+            look_direction,
+            Vec3::unit_y(),
+            fov,
+            aspect_ratio,
+            aperture,
+            focus_dist,
+        );
+        camera.update_uniforms();
+
+        self.window = Some(window);
+        self.surface = Some(surface);
+        self.renderer = Some(renderer);
+        self.camera = Some(camera);
+        self.window.as_ref().unwrap().request_redraw();
+        println!("setup mode: unlit color/depth preview; press Tab for path tracing");
+        Ok(())
+    }
+
+    fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    fn redraw(&mut self) {
+        let (Some(surface), Some(camera), Some(renderer)) =
+            (&self.surface, &mut self.camera, &mut self.renderer)
+        else {
+            return;
+        };
+        let frame_started = Instant::now();
+        let frame = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            _ => {
+                self.request_redraw();
+                return;
+            }
+        };
+        let render_target = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        if self.dirty || !self.move_queue.is_empty() {
+            for direction in &self.move_queue {
+                camera.translate(*direction, self.speed * 0.1);
+            }
+            camera.update_uniforms();
+            renderer.reset_samples();
+        }
+        let tracing = renderer.needs_more_samples();
+        renderer.render_frame(camera, &render_target);
+        self.dirty = false;
+        renderer.present(frame);
+        self.frame_time_total += frame_started.elapsed();
+        self.frame_count += 1;
+        self.timing_pending_progress |= tracing;
+        let finished = !renderer.needs_more_samples() && self.move_queue.is_empty();
+        if self.timing_window_start.elapsed() >= Duration::from_secs(1)
+            || (finished && self.timing_pending_progress)
+        {
+            let average_ms =
+                self.frame_time_total.as_secs_f64() * 1000.0 / f64::from(self.frame_count.max(1));
+            let redraws_per_second = f64::from(self.frame_count)
+                / self.timing_window_start.elapsed().as_secs_f64().max(0.001);
+            println!(
+                "frame CPU work: {average_ms:.2} ms average ({redraws_per_second:.1} redraws/s), {} mode, pass {}",
+                if self.setup_mode { "setup" } else { "render" },
+                renderer.completed_passes(),
+            );
+            self.timing_window_start = Instant::now();
+            self.frame_time_total = Duration::ZERO;
+            self.frame_count = 0;
+            self.timing_pending_progress = false;
+        }
+        if renderer.needs_more_samples() || !self.move_queue.is_empty() {
+            self.request_redraw();
+        }
+    }
+
+    fn handle_key(&mut self, event_loop: &ActiveEventLoop, key: PhysicalKey, state: ElementState) {
+        let pressed = state == ElementState::Pressed;
+        let window = self.window.clone();
+        let Some(renderer) = &mut self.renderer else {
+            return;
+        };
+        let mode = match key {
+            PhysicalKey::Code(KeyCode::Digit1) => Some(0),
+            PhysicalKey::Code(KeyCode::Digit2) => Some(2),
+            PhysicalKey::Code(KeyCode::Digit3) => Some(1),
+            _ => None,
+        };
+        if pressed && key == PhysicalKey::Code(KeyCode::Tab) {
+            self.setup_mode = !self.setup_mode;
+            if self.setup_mode {
+                renderer.set_quality(1, 1);
+                renderer.set_render_mode(2);
+                println!("setup mode: unlit color/depth preview");
+            } else {
+                renderer.set_render_mode(0);
+                renderer.set_quality(self.args.bounces, self.args.samples);
+                println!(
+                    "render mode: {} bounces, {} samples per pass",
+                    self.args.bounces, self.args.samples
+                );
+            }
+            self.dirty = true;
+            if let Some(window) = &window {
+                window.request_redraw();
+            }
+        }
+
+        let direction = match key {
+            PhysicalKey::Code(KeyCode::KeyW) => Some(gpu_camera::Direction::Forward),
+            PhysicalKey::Code(KeyCode::KeyA) => Some(gpu_camera::Direction::Left),
+            PhysicalKey::Code(KeyCode::KeyS) => Some(gpu_camera::Direction::Backward),
+            PhysicalKey::Code(KeyCode::KeyD) => Some(gpu_camera::Direction::Right),
+            PhysicalKey::Code(KeyCode::Space) => Some(gpu_camera::Direction::Up),
+            PhysicalKey::Code(KeyCode::ControlLeft) => Some(gpu_camera::Direction::Down),
+            _ => None,
+        };
+        if pressed && matches!(key, PhysicalKey::Code(KeyCode::Enter | KeyCode::KeyP)) {
+            let width = self.args.width as u32;
+            let height = self.args.height as u32;
+            match renderer.readback_colors() {
+                Ok(colors) => {
+                    let timestamp = SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .map(|duration| duration.as_millis())
+                        .unwrap_or_default();
+                    let filename = format!("output/{timestamp}.png");
+                    if let Err(error) = io::save_colors_as_image(&colors, width, height, &filename)
                     {
-                        let average_ms = frame_time_total.as_secs_f64() * 1000.0
-                            / f64::from(frame_count.max(1));
-                        let redraws_per_second = f64::from(frame_count)
-                            / timing_window_start.elapsed().as_secs_f64().max(0.001);
-                        println!(
-                            "frame CPU work: {average_ms:.2} ms average ({redraws_per_second:.1} redraws/s), {} mode, pass {}",
-                            if setup_mode { "setup" } else { "render" },
-                            renderer.completed_passes(),
-                        );
-                        timing_window_start = Instant::now();
-                        frame_time_total = Duration::ZERO;
-                        frame_count = 0;
-                        timing_pending_progress = false;
-                    }
-                    if renderer.needs_more_samples() || !move_queue.is_empty() {
-                        window.request_redraw();
+                        eprintln!("failed to save {filename}: {error}");
+                    } else {
+                        println!("saved {filename}");
+                        event_loop.exit();
                     }
                 }
-                _ => (),
-            },
-            Event::DeviceEvent { event, .. } => match event {
-                DeviceEvent::MouseWheel { delta } => {
-                    let delta = match delta {
-                        MouseScrollDelta::PixelDelta(delta) => 0.01 * delta.y as f32,
-                        MouseScrollDelta::LineDelta(_, y) => y,
-                    };
-                    if left_mouse_button_pressed {
+                Err(error) => eprintln!("failed to read back rendered image: {error}"),
+            }
+        }
+        if key == PhysicalKey::Code(KeyCode::KeyF) && pressed {
+            self.filter_enabled = !self.filter_enabled;
+            renderer.set_filter_enabled(self.filter_enabled);
+            if let Some(window) = &window {
+                window.request_redraw();
+            }
+        }
+        if let Some(mode) = mode {
+            if pressed {
+                renderer.set_render_mode(mode);
+                self.dirty = true;
+                if let Some(window) = &window {
+                    window.request_redraw();
+                }
+            }
+        } else if let Some(direction) = direction {
+            if pressed {
+                self.move_queue.insert(direction);
+            } else {
+                self.move_queue.remove(&direction);
+            }
+            if let Some(window) = &window {
+                window.request_redraw();
+            }
+        } else if key == PhysicalKey::Code(KeyCode::ShiftLeft) {
+            self.speed = if pressed { 3.0 } else { 1.0 };
+            if !self.move_queue.is_empty() {
+                if let Some(window) = &window {
+                    window.request_redraw();
+                }
+            }
+        }
+    }
+}
+
+impl ApplicationHandler for GpuApp {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_some() || self.failure.is_some() {
+            return;
+        }
+        if let Err(error) = self.initialize(event_loop) {
+            self.failure = Some(error.to_string());
+            event_loop.exit();
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        if self.window.as_ref().map(|window| window.id()) != Some(window_id) {
+            return;
+        }
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::RedrawRequested => self.redraw(),
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.physical_key == PhysicalKey::Code(KeyCode::Tab) && event.repeat {
+                    return;
+                }
+                self.handle_key(event_loop, event.physical_key, event.state);
+            }
+            WindowEvent::MouseInput { button, state, .. } => {
+                let pressed = state == ElementState::Pressed;
+                match button {
+                    MouseButton::Left => self.left_mouse_button_pressed = pressed,
+                    MouseButton::Right => self.right_mouse_button_pressed = pressed,
+                    _ => (),
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let delta = match delta {
+                    MouseScrollDelta::PixelDelta(delta) => 0.01 * delta.y as f32,
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                };
+                if let Some(camera) = &mut self.camera {
+                    if self.left_mouse_button_pressed {
                         camera.focus(delta, 0.1);
                     } else {
                         camera.zoom(delta, -1.0);
                     }
-                    dirty = true;
-                    window.request_redraw();
                 }
-                DeviceEvent::MouseMotion { delta: (dx, dy) } => {
-                    if left_mouse_button_pressed {
-                        camera.update_lookat(dx as f32, dy as f32);
-                        dirty = true;
-                    }
-                    if right_mouse_button_pressed {
-                        camera.apeture(dx as f32, 0.001);
-                        dirty = true;
-                    }
-                    if dirty {
-                        window.request_redraw();
-                    }
-                }
-                DeviceEvent::Button { button, state, .. } => {
-                    let pressed = state == ElementState::Pressed;
-                    match button {
-                        0 => left_mouse_button_pressed = pressed,
-                        1 => right_mouse_button_pressed = pressed,
-                        _ => (),
-                    }
-                }
-                DeviceEvent::Key(RawKeyEvent {
-                    physical_key: key,
-                    state,
-                }) => {
-                    let pressed = state == ElementState::Pressed;
-                    let mode = match key {
-                        PhysicalKey::Code(KeyCode::Digit1) => Some(0),
-                        PhysicalKey::Code(KeyCode::Digit2) => Some(2),
-                        PhysicalKey::Code(KeyCode::Digit3) => Some(1),
-                        _ => None,
-                    };
-                    if pressed && key == PhysicalKey::Code(KeyCode::Tab) {
-                        setup_mode = !setup_mode;
-                        renderer.set_render_mode(0);
-                        if setup_mode {
-                            renderer.set_quality(1, 1);
-                            println!("setup mode: 1 bounce, 1 sample per pass");
-                        } else {
-                            renderer.set_quality(args.bounces, args.samples);
-                            println!(
-                                "render mode: {} bounces, {} samples per pass",
-                                args.bounces, args.samples
-                            );
-                        }
-                        dirty = true;
-                        window.request_redraw();
-                    }
-                    let direction = match key {
-                        PhysicalKey::Code(KeyCode::KeyW) => Some(gpu_camera::Direction::Forward),
-                        PhysicalKey::Code(KeyCode::KeyA) => Some(gpu_camera::Direction::Left),
-                        PhysicalKey::Code(KeyCode::KeyS) => Some(gpu_camera::Direction::Backward),
-                        PhysicalKey::Code(KeyCode::KeyD) => Some(gpu_camera::Direction::Right),
-                        PhysicalKey::Code(KeyCode::Space) => Some(gpu_camera::Direction::Up),
-                        PhysicalKey::Code(KeyCode::ControlLeft) => {
-                            Some(gpu_camera::Direction::Down)
-                        }
-                        _ => None,
-                    };
-                    if pressed && matches!(key, PhysicalKey::Code(KeyCode::Enter | KeyCode::KeyP)) {
-                        match renderer.readback_colors() {
-                            Ok(colors) => {
-                                let timestamp = SystemTime::now()
-                                    .duration_since(SystemTime::UNIX_EPOCH)
-                                    .map(|duration| duration.as_millis())
-                                    .unwrap_or_default();
-                                let filename = format!("output/{timestamp}.png");
-                                if let Err(error) =
-                                    io::save_colors_as_image(&colors, width, height, &filename)
-                                {
-                                    eprintln!("failed to save {filename}: {error}");
-                                } else {
-                                    println!("saved {filename}");
-                                    control_handle.exit();
-                                }
-                            }
-                            Err(error) => eprintln!("failed to read back rendered image: {error}"),
-                        }
-                    }
-                    if key == PhysicalKey::Code(KeyCode::KeyF) && pressed {
-                        filter_enabled = !filter_enabled;
-                        renderer.set_filter_enabled(filter_enabled);
-                        window.request_redraw();
-                    }
-                    if let Some(mode) = mode {
-                        if pressed {
-                            renderer.set_render_mode(mode);
-                            dirty = true;
-                            window.request_redraw();
-                        }
-                    } else if let Some(direction) = direction {
-                        if pressed {
-                            move_queue.insert(direction);
-                        } else {
-                            move_queue.remove(&direction);
-                        }
-                        window.request_redraw();
-                    } else if key == PhysicalKey::Code(KeyCode::ShiftLeft) {
-                        speed = if pressed { 3.0 } else { 1.0 };
-                        if !move_queue.is_empty() {
-                            window.request_redraw();
-                        }
-                    }
-                }
-                _ => (),
-            },
+                self.dirty = true;
+                self.request_redraw();
+            }
             _ => (),
         }
-    })?;
-    Ok(())
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
+            if let Some(camera) = &mut self.camera {
+                if self.left_mouse_button_pressed {
+                    camera.update_lookat(dx as f32, dy as f32);
+                    self.dirty = true;
+                }
+                if self.right_mouse_button_pressed {
+                    camera.apeture(dx as f32, 0.001);
+                    self.dirty = true;
+                }
+            }
+            if self.dirty {
+                self.request_redraw();
+            }
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        event_loop.set_control_flow(ControlFlow::Wait);
+    }
 }
 
 fn make_default_setup(args: &Args) -> render::Renderer {
@@ -333,10 +445,13 @@ fn make_default_setup(args: &Args) -> render::Renderer {
     }
 }
 
-async fn connect_to_gpu(window: &Window) -> Result<(wgpu::Device, wgpu::Queue, wgpu::Surface<'_>)> {
+async fn connect_to_gpu(
+    window: Arc<Window>,
+) -> Result<(wgpu::Device, wgpu::Queue, wgpu::Surface<'static>)> {
     use wgpu::TextureFormat::{Bgra8Unorm, Rgba8Unorm};
 
     let instance = wgpu::Instance::default();
+    let size = window.inner_size();
     let surface = instance.create_surface(window)?;
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -358,7 +473,6 @@ async fn connect_to_gpu(window: &Window) -> Result<(wgpu::Device, wgpu::Queue, w
         .into_iter()
         .find(|format| matches!(format, Rgba8Unorm | Bgra8Unorm))
         .context("could not find a supported 8-bit surface format")?;
-    let size = window.inner_size();
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format,

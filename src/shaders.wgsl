@@ -322,7 +322,8 @@ fn trace_ray(ray: Ray) -> vec3f {
         if uniforms.render_mode == 1u {
             return (hit.normal + vec3f(1.0)) * 0.5;
         }
-        return materials[hit.material_index].color.xyz;
+        let depth_shading = clamp(1.0 - hit.t * 0.01, 0.35, 1.0);
+        return materials[hit.material_index].color.xyz * depth_shading;
     }
 
     var current_ray = ray;

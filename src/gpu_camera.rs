@@ -1,7 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 
-use ultraviolet::{Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{Vec2, Vec3, Vec4};
 const SENSETIVITY: f32 = 0.001;
+const MAX_PITCH: f32 = 1.553343;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Hash)]
 pub enum Direction {
@@ -29,6 +30,8 @@ pub struct Camera {
     uniforms: CameraUniforms,
     eye: Vec3,
     lookat: Vec3,
+    yaw: f32,
+    pitch: f32,
     vup: Vec3,
     fov: f32,
     aspect_ratio: f32,
@@ -46,10 +49,13 @@ impl Camera {
         apeture: f32,
         focus_dist: f32,
     ) -> Camera {
+        let lookat = lookat.normalized();
         Camera {
             uniforms: CameraUniforms::zeroed(),
             eye,
             lookat,
+            yaw: lookat.x.atan2(-lookat.z),
+            pitch: lookat.y.asin(),
             vup,
             fov,
             aspect_ratio,
@@ -96,8 +102,14 @@ impl Camera {
     }
 
     pub fn update_lookat(&mut self, du: f32, dv: f32) {
-        let turn = Rotor3::from_euler_angles(0.0, -dv * SENSETIVITY, -du * SENSETIVITY);
-        self.lookat = (self.lookat.rotated_by(turn)).normalized();
+        self.yaw += du * SENSETIVITY;
+        self.pitch = (self.pitch - dv * SENSETIVITY).clamp(-MAX_PITCH, MAX_PITCH);
+        let cos_pitch = self.pitch.cos();
+        self.lookat = Vec3::new(
+            self.yaw.sin() * cos_pitch,
+            self.pitch.sin(),
+            -self.yaw.cos() * cos_pitch,
+        );
     }
 
     pub fn zoom(&mut self, delta: f32, scale: f32) {
@@ -110,5 +122,48 @@ impl Camera {
 
     pub fn apeture(&mut self, delta: f32, scale: f32) {
         self.apeture += delta * scale;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vertical_mouse_motion_changes_pitch_not_yaw() {
+        let mut camera = Camera::new(
+            Vec3::zero(),
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec3::unit_y(),
+            60.0,
+            1.0,
+            0.0,
+            1.0,
+        );
+
+        camera.update_lookat(0.0, 100.0);
+
+        assert!(camera.lookat.y < 0.0);
+        assert!(camera.lookat.x.abs() < 1e-6);
+        assert!(camera.lookat.z < 0.0);
+    }
+
+    #[test]
+    fn horizontal_mouse_motion_changes_yaw_not_pitch() {
+        let mut camera = Camera::new(
+            Vec3::zero(),
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec3::unit_y(),
+            60.0,
+            1.0,
+            0.0,
+            1.0,
+        );
+
+        camera.update_lookat(100.0, 0.0);
+
+        assert!(camera.lookat.x > 0.0);
+        assert!(camera.lookat.y.abs() < 1e-6);
+        assert!(camera.lookat.z < 0.0);
     }
 }

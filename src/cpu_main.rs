@@ -66,7 +66,7 @@ pub struct Args {
     gamma: f32,
 
     /// Max light brightness
-    #[arg(short, long, default_value_t = INFINITY)]
+    #[arg(short, long, default_value_t = f32::INFINITY)]
     light_clamp: f32,
 
     /// apply bilateral filter after render to reduce noise
@@ -192,7 +192,7 @@ fn make_default_setup(args: &Args) -> Renderer {
         sample_rate: args.samples,
         max_bounce: args.bounces,
         hdr: image,
-        light_clamp: INFINITY,
+        light_clamp: f32::INFINITY,
     }
 }
 

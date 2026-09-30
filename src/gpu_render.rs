@@ -362,7 +362,10 @@ impl PathTracer {
         let should_filter = self.uniforms.filter_enabled != 0
             && (self.filter_dirty
                 || (self.uniforms.frame_num != self.last_filtered_pass
-                    && (self.uniforms.frame_num % FILTER_UPDATE_INTERVAL == 0
+                    && (self
+                        .uniforms
+                        .frame_num
+                        .is_multiple_of(FILTER_UPDATE_INTERVAL)
                         || (should_trace && self.uniforms.frame_num >= self.max_passes))));
         if should_filter {
             self.uniforms.filter_valid = 1;
