@@ -20,21 +20,13 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-#[allow(dead_code)]
 mod camera;
+mod display;
 mod gpu_camera;
 mod gpu_render;
 mod gpu_scene;
 mod io;
-#[allow(dead_code)]
 mod material;
-#[allow(dead_code)]
-mod random;
-#[allow(dead_code)]
-mod ray;
-#[allow(dead_code)]
-mod render;
-#[allow(dead_code)]
 mod tracer;
 
 #[derive(Parser, Debug)]
@@ -61,14 +53,14 @@ pub struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let cpu_renderer = if let Some(path) = &args.scene {
+    let scene = if let Some(path) = &args.scene {
         io::load_scene(Path::new(path), &args)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?
     } else {
         make_default_setup(&args)
     };
     let event_loop = EventLoop::new()?;
-    let mut app = GpuApp::new(args, cpu_renderer);
+    let mut app = GpuApp::new(args, scene);
     event_loop.run_app(&mut app)?;
     if let Some(error) = app.failure {
         anyhow::bail!(error);
@@ -78,7 +70,7 @@ fn main() -> Result<()> {
 
 struct GpuApp {
     args: Args,
-    scene: Option<render::Renderer>,
+    scene: Option<io::SceneData>,
     window: Option<Arc<Window>>,
     surface: Option<wgpu::Surface<'static>>,
     renderer: Option<gpu_render::PathTracer>,
@@ -98,7 +90,7 @@ struct GpuApp {
 }
 
 impl GpuApp {
-    fn new(args: Args, scene: render::Renderer) -> Self {
+    fn new(args: Args, scene: io::SceneData) -> Self {
         Self {
             filter_enabled: args.filter,
             args,
@@ -133,7 +125,6 @@ impl GpuApp {
             )?,
         );
         let scene = self.scene.take().context("scene was already initialized")?;
-        let gpu_scene = scene.world.to_gpu_scene();
         let (eye, look_direction, fov, aspect_ratio, aperture, focus_dist) =
             scene.camera.gpu_parameters();
         let (device, queue, surface) = pollster::block_on(connect_to_gpu(window.clone()))?;
@@ -147,8 +138,8 @@ impl GpuApp {
             width,
             height,
             format,
-            &gpu_scene,
-            scene.hdr.as_ref().as_ref(),
+            &scene.gpu_scene,
+            scene.hdr.as_ref(),
             self.args.bounces,
             self.args.samples,
             self.args.passes,
@@ -420,28 +411,22 @@ impl ApplicationHandler for GpuApp {
     }
 }
 
-fn make_default_setup(args: &Args) -> render::Renderer {
+fn make_default_setup(args: &Args) -> io::SceneData {
     let image = File::open("scene/hdr/studio_small.hdr")
         .ok()
         .and_then(|file| radiant::load(BufReader::new(file)).ok());
     let camera = camera::Camera::new(
         Vec3::new(13.0, 2.0, 3.0),
         Vec3::zero(),
-        Vec3::unit_y(),
         20.0,
         args.width as f32 / args.height as f32,
         0.1,
         10.0,
     );
-    render::Renderer {
-        width: args.width,
-        height: args.height,
+    io::SceneData {
         camera,
-        world: Arc::new(io::random_scene(true, true, true, true, true)),
-        sample_rate: args.samples,
-        max_bounce: args.bounces,
-        hdr: Arc::new(image),
-        light_clamp: args.light_clamp,
+        gpu_scene: io::random_scene(true, true, true, true, true),
+        hdr: image,
     }
 }
 

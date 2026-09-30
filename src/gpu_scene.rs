@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use ultraviolet::Vec3;
 
-use crate::{material::Material, tracer::hittable::ScenePrimitive};
+use crate::{material::Material, tracer::primitive::ScenePrimitive};
 
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
@@ -45,7 +45,7 @@ struct BoundedPrimitive {
 }
 
 impl GpuScene {
-    pub fn from_cpu_primitives(primitives: Vec<ScenePrimitive>) -> Self {
+    pub fn from_primitives(primitives: Vec<ScenePrimitive>) -> Self {
         let mut materials = Vec::with_capacity(primitives.len());
         let mut bounded = primitives
             .into_iter()
@@ -231,7 +231,7 @@ mod tests {
                 material: Material::lambertian((0.5, 0.5, 0.5)),
             })
             .collect();
-        let scene = GpuScene::from_cpu_primitives(primitives);
+        let scene = GpuScene::from_primitives(primitives);
 
         assert_eq!(scene.primitives.len(), 9);
         assert_eq!(scene.materials.len(), 9);
@@ -254,7 +254,7 @@ mod tests {
                 material: Material::lambertian((0.5, 0.5, 0.5)),
             })
             .collect();
-        let scene = GpuScene::from_cpu_primitives(primitives);
+        let scene = GpuScene::from_primitives(primitives);
 
         let mut visited = Vec::new();
         let mut node_index = 0;

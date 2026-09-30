@@ -341,7 +341,7 @@ impl PathTracer {
             .iter()
             .map(|pixel| {
                 let color = Vec3::new(pixel[0], pixel[1], pixel[2]);
-                crate::render::to_rgb(&color, self.uniforms.gamma)
+                crate::display::to_rgb(&color, self.uniforms.gamma)
             })
             .collect();
         drop(mapped);

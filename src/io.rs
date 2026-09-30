@@ -9,17 +9,22 @@ use std::{
 };
 use ultraviolet::Vec3;
 
+use crate::gpu_scene::GpuScene;
 use crate::material::Material;
-use crate::render::Renderer;
 use crate::tracer::{
-    bvh::Bvh,
     cube::{ABox, Cube},
-    hittable::Hittable,
     mesh::Mesh,
+    primitive::GpuPrimitiveSource,
     sphere::Sphere,
     triangle::Triangle,
 };
 use crate::{camera, Args};
+
+pub struct SceneData {
+    pub camera: camera::Camera,
+    pub gpu_scene: GpuScene,
+    pub hdr: Option<radiant::Image>,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Scene {
@@ -93,7 +98,7 @@ struct Camera {
     apeture: f32,
 }
 
-pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn std::error::Error>> {
+pub fn load_scene(scene_file: &Path, args: &Args) -> Result<SceneData, Box<dyn std::error::Error>> {
     println!("reading file");
     let mut file = File::open(scene_file)?;
     let mut contents = String::new();
@@ -103,13 +108,13 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
     let scene: Scene = ron::de::from_str(&contents)?;
 
     println!("loading hdr");
-    let image = if let Ok(f) = File::open(scene.hdr.unwrap_or("".to_string())) {
+    let image = if let Ok(f) = File::open(scene.hdr.unwrap_or_default()) {
         let reader = BufReader::new(f);
-        Arc::new(radiant::load(reader).ok())
+        radiant::load(reader).ok()
     } else {
-        Arc::new(None)
+        None
     };
-    let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
+    let mut world: Vec<Arc<dyn GpuPrimitiveSource + Send + Sync>> = vec![];
     println!("loading objects & materials");
     scene.objects.into_iter().for_each(|obj| {
         let material = match *scene.materials.get(&obj.material).unwrap() {
@@ -171,7 +176,7 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
                     },
                 )
                 .expect("failed to load file");
-                let mut meshes: Vec<Arc<dyn Hittable + Send + Sync>> = Vec::new();
+                let mut meshes: Vec<Arc<dyn GpuPrimitiveSource + Send + Sync>> = Vec::new();
                 models.iter().for_each(|model| {
                     meshes.push(Arc::new(Mesh::new(
                         &model.mesh,
@@ -186,31 +191,34 @@ pub fn load_scene(scene_file: &Path, args: &Args) -> Result<Renderer, Box<dyn st
             }
         }
     });
-    println!("building BVH");
-    let bvh = Bvh::new(&mut world);
+    let mut primitives = Vec::new();
+    for object in &world {
+        object.append_gpu_primitives(&mut primitives);
+    }
+    let gpu_scene = GpuScene::from_primitives(primitives);
 
-    Ok(Renderer {
-        width: args.width,
-        height: args.height,
+    Ok(SceneData {
         camera: camera::Camera::new(
             Vec3::from(scene.camera.position),
             Vec3::from(scene.camera.lookat),
-            Vec3::unit_y(),
             scene.camera.fov,
             args.width as f32 / args.height as f32,
             scene.camera.apeture,
             scene.camera.focus_dist,
         ),
-        world: Arc::new(bvh),
-        sample_rate: args.samples,
-        max_bounce: args.bounces,
+        gpu_scene,
         hdr: image,
-        light_clamp: args.light_clamp,
     })
 }
 
-pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glass: bool) -> Bvh {
-    let mut world: Vec<Arc<dyn Hittable + Send + Sync>> = vec![];
+pub fn random_scene(
+    lights: bool,
+    diffuse: bool,
+    glossy: bool,
+    metal: bool,
+    glass: bool,
+) -> GpuScene {
+    let mut world: Vec<Arc<dyn GpuPrimitiveSource + Send + Sync>> = vec![];
     let ground: Material = Material::glossy((0.55, 0.53, 0.56), 0.1, 0.7);
     world.push(Arc::new(ABox::new(
         (-2.0, -0.5, -2.0),
@@ -294,7 +302,11 @@ pub fn random_scene(lights: bool, diffuse: bool, glossy: bool, metal: bool, glas
     world.push(Arc::new(Sphere::new((-4.0, 1.0, 0.0), 1.0, gloss)));
     // world.push(Arc::new(Sphere::new((-4.5, 1.0, 0.0), 1.0, diffuse)));
 
-    Bvh::new(&mut world)
+    let mut primitives = Vec::new();
+    for object in &world {
+        object.append_gpu_primitives(&mut primitives);
+    }
+    GpuScene::from_primitives(primitives)
 }
 
 // Define a helper function to convert a 32-bit int color to an RGB triplet

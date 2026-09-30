@@ -1,10 +1,9 @@
-use crate::{material::Material, ray::Ray};
+use crate::material::Material;
 
 use ultraviolet::Vec3;
 
 use super::{
-    cube::Aabb,
-    hittable::{HitRecord, Hittable, ScenePrimitive},
+    primitive::{GpuPrimitiveSource, ScenePrimitive},
 };
 
 #[derive(Copy, Clone)]
@@ -23,47 +22,7 @@ impl Sphere {
         }
     }
 }
-impl Hittable for Sphere {
-    #[inline]
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
-        let oc = ray.pos - self.center;
-        let half_b = oc.dot(ray.dir);
-        let disc = half_b.powi(2) - (oc.mag_sq() - (self.radius.powi(2)));
-
-        if disc > 0.0 {
-            let h = disc.sqrt();
-            let mut temp = -half_b - h;
-            if temp < t_max && temp > t_min {
-                let hit_point = ray.at(temp);
-                return Some(HitRecord::new(
-                    temp,
-                    hit_point,
-                    (hit_point - self.center).normalized(),
-                    &self.material,
-                ));
-            }
-
-            temp = -half_b + h;
-            if temp < t_max && temp > t_min {
-                let hit_point = ray.at(temp);
-                return Some(HitRecord::new(
-                    temp,
-                    hit_point,
-                    (hit_point - self.center).normalized(),
-                    &self.material,
-                ));
-            }
-        }
-        None
-    }
-
-    fn bounding_box(&self) -> Aabb {
-        Aabb {
-            min: self.center - Vec3::one() * self.radius.abs(),
-            max: self.center + Vec3::one() * self.radius.abs(),
-        }
-    }
-
+impl GpuPrimitiveSource for Sphere {
     fn append_gpu_primitives(&self, primitives: &mut Vec<ScenePrimitive>) {
         primitives.push(ScenePrimitive::Sphere {
             center: self.center,

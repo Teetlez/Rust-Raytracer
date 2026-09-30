@@ -1,21 +1,14 @@
-use std::{ops::Mul, sync::Arc};
+use std::ops::Mul;
 
-use crate::{material::Material, ray::Ray};
+use crate::material::Material;
 
 use ultraviolet::{Rotor3, Vec3};
 
-use super::{
-    bvh::Bvh,
-    cube::Aabb,
-    hittable::{HitRecord, Hittable},
-    triangle::Triangle,
-};
+use super::{primitive::{GpuPrimitiveSource, ScenePrimitive}, triangle::Triangle};
 
 #[derive(Clone)]
 pub struct Mesh {
-    pub bvh: Bvh,
-    pub material: Material,
-    pub cull_backface: bool,
+    triangles: Vec<Triangle>,
 }
 
 impl Mesh {
@@ -27,76 +20,43 @@ impl Mesh {
         cull_backface: bool,
         material: Material,
     ) -> Mesh {
-        let mut mesh: Vec<Arc<dyn Hittable + Send + Sync>> = Vec::new();
+        let mut triangles = Vec::with_capacity(polygons.indices.len() / 3);
         let rot = Rotor3::from_euler_angles(rotation.z, rotation.x, rotation.y).normalized();
-        polygons.indices.as_chunks::<3>().0.iter().for_each(|face| {
-            let vertices: [Vec3; 3] = [
+        for face in polygons.indices.as_chunks::<3>().0 {
+            let vertices = face.map(|index| {
                 Vec3::new(
-                    polygons.positions[3 * face[0] as usize],
-                    polygons.positions[(3 * face[0] as usize) + 1],
-                    polygons.positions[(3 * face[0] as usize) + 2],
-                ),
+                    polygons.positions[3 * index as usize],
+                    polygons.positions[(3 * index as usize) + 1],
+                    polygons.positions[(3 * index as usize) + 2],
+                )
+                .mul(scale)
+                .rotated_by(rot)
+                    + translation
+            });
+            let mut normals = face.map(|index| {
                 Vec3::new(
-                    polygons.positions[3 * face[1] as usize],
-                    polygons.positions[(3 * face[1] as usize) + 1],
-                    polygons.positions[(3 * face[1] as usize) + 2],
-                ),
-                Vec3::new(
-                    polygons.positions[3 * face[2] as usize],
-                    polygons.positions[(3 * face[2] as usize) + 1],
-                    polygons.positions[(3 * face[2] as usize) + 2],
-                ),
-            ]
-            .into_iter()
-            .map(|vertex| vertex.mul(scale).rotated_by(rot) + translation)
-            .collect::<Vec<Vec3>>()
-            .try_into()
-            .unwrap();
-
-            let mut normals: [Vec3; 3] = [
-                Vec3::new(
-                    polygons.normals[3 * face[0] as usize],
-                    polygons.normals[(3 * face[0] as usize) + 1],
-                    polygons.normals[(3 * face[0] as usize) + 2],
-                ),
-                Vec3::new(
-                    polygons.normals[3 * face[1] as usize],
-                    polygons.normals[(3 * face[1] as usize) + 1],
-                    polygons.normals[(3 * face[1] as usize) + 2],
-                ),
-                Vec3::new(
-                    polygons.normals[3 * face[2] as usize],
-                    polygons.normals[(3 * face[2] as usize) + 1],
-                    polygons.normals[(3 * face[2] as usize) + 2],
-                ),
-            ];
+                    polygons.normals[3 * index as usize],
+                    polygons.normals[(3 * index as usize) + 1],
+                    polygons.normals[(3 * index as usize) + 2],
+                )
+            });
             rot.rotate_vecs(&mut normals);
 
-            mesh.push(Arc::new(Triangle::new(
+            triangles.push(Triangle::new(
                 vertices,
                 normals,
                 !cull_backface,
                 material,
-            )));
-        });
-        Mesh {
-            bvh: Bvh::new(mesh.as_mut_slice()),
-            material,
-            cull_backface,
+            ));
         }
+        Mesh { triangles }
     }
 }
 
-impl Hittable for Mesh {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'_>> {
-        self.bvh.hit(ray, t_min, t_max)
-    }
-
-    fn bounding_box(&self) -> Aabb {
-        *self.bvh.aabb_box
-    }
-
-    fn append_gpu_primitives(&self, primitives: &mut Vec<super::hittable::ScenePrimitive>) {
-        self.bvh.append_gpu_primitives(primitives);
+impl GpuPrimitiveSource for Mesh {
+    fn append_gpu_primitives(&self, primitives: &mut Vec<ScenePrimitive>) {
+        for triangle in &self.triangles {
+            triangle.append_gpu_primitives(primitives);
+        }
     }
 }
