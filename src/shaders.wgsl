@@ -5,6 +5,9 @@ const EPSILON: f32 = 1e-4;
 const SURVIVAL_BIAS: f32 = 0.01;
 const AIR_INDEX: f32 = 1.00028;
 const INVALID_INDEX: u32 = 0xffffffffu;
+const MIN_CONVERGENCE_SAMPLES: u32 = 32u;
+const CONVERGENCE_ABSOLUTE_ERROR: f32 = 1e-6;
+const CONVERGENCE_RELATIVE_ERROR: f32 = 1e-3;
 
 struct CameraUniforms {
     eye: vec3f,
@@ -30,9 +33,9 @@ struct Uniforms {
     gamma: f32,
     light_clamp: f32,
     filter_valid: u32,
-    _pad1: u32,
-    _pad2: u32,
+    reset_generation: u32,
     _pad3: u32,
+    _pad4: u32,
 }
 
 struct BvhNode {
@@ -90,6 +93,8 @@ var hdr_texture: texture_2d<f32>;
 var<storage, read_write> filter_a: array<vec4f>;
 @group(0) @binding(7)
 var<storage, read_write> filter_b: array<vec4f>;
+@group(0) @binding(8)
+var<storage, read_write> pixel_stats: array<vec4u>;
 
 var<private> rng_state: u32;
 
@@ -365,18 +370,47 @@ fn trace_compute(@builtin(global_invocation_id) invocation: vec3u) {
         return;
     }
     let pixel_index = invocation.x + invocation.y * uniforms.width;
+    let previous_stats = pixel_stats[pixel_index];
+    let has_previous_stats = previous_stats.z == uniforms.reset_generation;
+    let previous_count = select(0u, previous_stats.y, has_previous_stats);
+    let previous_m2 = select(0.0, bitcast<f32>(previous_stats.x), has_previous_stats);
+    let previous_mean_color = select(vec3f(0.0), sample_sums[pixel_index].xyz, has_previous_stats,);
+    if previous_count >= MIN_CONVERGENCE_SAMPLES {
+        let count = f32(previous_count);
+        let variance = max(previous_m2 / (count - 1.0), 0.0);
+        let standard_error = sqrt(variance / count);
+        let tolerance = max(CONVERGENCE_ABSOLUTE_ERROR, length(previous_mean_color) * CONVERGENCE_RELATIVE_ERROR,);
+        if standard_error <= tolerance {
+            return;
+        }
+    }
+
     rng_state = pcg(pixel_index ^ pcg(uniforms.frame_num * 747796405u + 2891336453u));
     var pass_sum = vec3f(0.0);
+    var pass_mean = vec3f(0.0);
+    var pass_m2 = vec3f(0.0);
+    var pass_count = 0u;
     for (var sample_index = 0u; sample_index < uniforms.samples_per_pass; sample_index += 1u) {
-        pass_sum += trace_ray(camera_ray(invocation.xy));
+        let sample_color = trace_ray(camera_ray(invocation.xy));
+        pass_sum += sample_color;
+        pass_count += 1u;
+        let delta = sample_color - pass_mean;
+        pass_mean += delta / f32(pass_count);
+        pass_m2 += delta * (sample_color - pass_mean);
     }
-    let old_sum = select(vec3f(0.0), sample_sums[pixel_index].xyz, uniforms.frame_num > 1u);
-    sample_sums[pixel_index] = vec4f(old_sum + pass_sum / f32(uniforms.samples_per_pass), 1.0,);
+    let total_count = previous_count + pass_count;
+    let color_delta = pass_mean - previous_mean_color;
+    let mean_color = previous_mean_color + color_delta * (f32(pass_count) / f32(total_count));
+    let count_before = f32(previous_count);
+    let batch_count = f32(pass_count);
+    let combined_m2 = previous_m2 + dot(pass_m2, vec3f(1.0)) + dot(color_delta, color_delta) * count_before * batch_count / f32(total_count);
+    sample_sums[pixel_index] = vec4f(mean_color, 1.0);
+    pixel_stats[pixel_index] = vec4u(bitcast<u32>(combined_m2), total_count, uniforms.reset_generation, 0u,);
 }
 
 fn filter_source(index: u32, source_kind: u32) -> vec3f {
     if source_kind == 0u {
-        return sample_sums[index].xyz / f32(max(uniforms.frame_num, 1u));
+        return sample_sums[index].xyz;
     }
     if source_kind == 1u {
         return filter_a[index].xyz;
@@ -468,7 +502,7 @@ fn display_fs(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let x = min(u32(position.x), uniforms.width - 1u);
     let y = min(u32(position.y), uniforms.height - 1u);
     let index = x + y * uniforms.width;
-    var average = sample_sums[index].xyz / f32(max(uniforms.frame_num, 1u));
+    var average = sample_sums[index].xyz;
     if uniforms.filter_enabled != 0u && uniforms.filter_valid != 0u {
         average = filter_a[index].xyz;
     }

@@ -46,7 +46,8 @@ struct Uniforms {
     gamma: f32,
     light_clamp: f32,
     filter_valid: u32,
-    _pad1: [u32; 3],
+    reset_generation: u32,
+    _pad1: [u32; 2],
 }
 
 impl PathTracer {
@@ -74,6 +75,12 @@ impl PathTracer {
             label: Some("accumulated radiance"),
             size: (u64::from(width) * u64::from(height) * 16).max(16),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let variance_stats = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("per-pixel variance statistics"),
+            size: (u64::from(width) * u64::from(height) * 16).max(16),
+            usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
         let filter_a = device.create_buffer(&wgpu::BufferDescriptor {
@@ -107,7 +114,8 @@ impl PathTracer {
             gamma: gamma.recip(),
             light_clamp,
             filter_valid: 0,
-            _pad1: [0; 3],
+            reset_generation: 1,
+            _pad1: [0; 2],
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("path tracer uniforms"),
@@ -162,6 +170,7 @@ impl PathTracer {
                     wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
                 ),
                 storage_rw_layout_entry(7, wgpu::ShaderStages::COMPUTE),
+                storage_rw_layout_entry(8, wgpu::ShaderStages::COMPUTE),
             ],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -179,6 +188,7 @@ impl PathTracer {
                 },
                 buffer_entry(6, &filter_a),
                 buffer_entry(7, &filter_b),
+                buffer_entry(8, &variance_stats),
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -248,6 +258,7 @@ impl PathTracer {
     pub fn reset_samples(&mut self) {
         self.uniforms.frame_num = 0;
         self.uniforms.filter_valid = 0;
+        self.uniforms.reset_generation = self.uniforms.reset_generation.wrapping_add(1).max(1);
         self.last_filtered_pass = 0;
     }
 
@@ -324,21 +335,12 @@ impl PathTracer {
         let mapped = slice
             .get_mapped_range()
             .context("failed to access mapped image buffer")?;
-        let frame_count = if self.uniforms.filter_enabled == 0 || self.uniforms.filter_valid == 0 {
-            self.uniforms.frame_num.max(1) as f32
-        } else {
-            1.0
-        };
         let colors = bytemuck::cast_slice::<u8, f32>(&mapped)
             .as_chunks::<4>()
             .0
             .iter()
             .map(|pixel| {
-                let color = Vec3::new(
-                    pixel[0] / frame_count,
-                    pixel[1] / frame_count,
-                    pixel[2] / frame_count,
-                );
+                let color = Vec3::new(pixel[0], pixel[1], pixel[2]);
                 crate::render::to_rgb(&color, self.uniforms.gamma)
             })
             .collect();
@@ -567,5 +569,19 @@ mod tests {
         Validator::new(ValidationFlags::all(), Capabilities::all())
             .validate(&module)
             .expect("path tracer WGSL should validate");
+        let uniform_size = module
+            .types
+            .iter()
+            .find_map(|(_, ty)| {
+                if ty.name.as_deref() != Some("Uniforms") {
+                    return None;
+                }
+                match &ty.inner {
+                    naga::TypeInner::Struct { span, .. } => Some(*span as usize),
+                    _ => None,
+                }
+            })
+            .expect("WGSL Uniforms type should exist");
+        assert_eq!(uniform_size, std::mem::size_of::<super::Uniforms>());
     }
 }
